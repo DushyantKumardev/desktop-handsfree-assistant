@@ -13,6 +13,10 @@ from src.core.constants import (
     DEFAULT_DEBUG,
     DEFAULT_WAKEWORD_MODELS,
     DEFAULT_WAKEWORD_THRESHOLD,
+    DEFAULT_VAD_ENERGY_THRESHOLD,
+    DEFAULT_VAD_SILENCE_TIMEOUT,
+    DEFAULT_VAD_INITIAL_TIMEOUT,
+    DEFAULT_VAD_MAX_RECORD_TIME,
 )
 
 # Automatically load environment variables from project-level .env if present
@@ -44,12 +48,21 @@ class WakeWordConfig:
     threshold: float = float(os.getenv("WAKEWORD_THRESHOLD", str(DEFAULT_WAKEWORD_THRESHOLD)))
 
 @dataclass(frozen=True)
+class VADConfig:
+    """Voice Activity Detection and speech recording configuration."""
+    energy_threshold: float = float(os.getenv("VAD_ENERGY_THRESHOLD", str(DEFAULT_VAD_ENERGY_THRESHOLD)))
+    silence_timeout: float = float(os.getenv("VAD_SILENCE_TIMEOUT", str(DEFAULT_VAD_SILENCE_TIMEOUT)))
+    initial_timeout: float = float(os.getenv("VAD_INITIAL_TIMEOUT", str(DEFAULT_VAD_INITIAL_TIMEOUT)))
+    max_record_time: float = float(os.getenv("VAD_MAX_RECORD_TIME", str(DEFAULT_VAD_MAX_RECORD_TIME)))
+
+@dataclass(frozen=True)
 class AppConfig:
     """Global backend application settings."""
     app_env: str = os.getenv("APP_ENV", DEFAULT_APP_ENV)
     debug: bool = os.getenv("DEBUG", str(DEFAULT_DEBUG)).lower() in ("true", "1", "yes")
     audio: AudioConfig = field(default_factory=AudioConfig)
     wakeword: WakeWordConfig = field(default_factory=WakeWordConfig)
+    vad: VADConfig = field(default_factory=VADConfig)
 
 # Default global configuration instance
 config = AppConfig()

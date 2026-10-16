@@ -99,6 +99,14 @@ class AudioCapture:
         except queue.Empty:
             return None
 
+    def flush_queue(self) -> None:
+        """Discard all pending audio chunks in the internal queue."""
+        while not self._queue.empty():
+            try:
+                self._queue.get_nowait()
+            except queue.Empty:
+                break
+
     def stop(self) -> None:
         """Close and release the microphone input stream."""
         if not self._is_active:

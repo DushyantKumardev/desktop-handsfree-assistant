@@ -75,3 +75,5 @@ logs/
 *.log
 tmp/
 temp/
+*.wav
+
