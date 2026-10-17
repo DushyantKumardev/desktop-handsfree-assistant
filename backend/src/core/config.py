@@ -27,6 +27,10 @@ from src.core.constants import (
     DEFAULT_LLM_MODEL,
     DEFAULT_LLM_API_KEY,
     DEFAULT_LLM_TEMPERATURE,
+    DEFAULT_LLM_MAX_TOKENS,
+    DEFAULT_LLM_REASONING_EFFORT,
+    DEFAULT_SOUND_START_FILE,
+    DEFAULT_SOUND_STOP_FILE,
 )
 
 # Automatically load environment variables: backend/.env first, then root .env
@@ -91,6 +95,15 @@ class LLMConfig:
     model: str = os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL)
     api_key: str = os.getenv("LLM_API_KEY", DEFAULT_LLM_API_KEY)
     temperature: float = float(os.getenv("LLM_TEMPERATURE", str(DEFAULT_LLM_TEMPERATURE)))
+    max_tokens: int = int(os.getenv("LLM_MAX_TOKENS", str(DEFAULT_LLM_MAX_TOKENS)))
+    reasoning_effort: Optional[str] = os.getenv("LLM_REASONING_EFFORT", DEFAULT_LLM_REASONING_EFFORT)
+
+
+@dataclass(frozen=True)
+class SoundConfig:
+    """Sound effects and audio cues configuration."""
+    start_file: str = os.getenv("SOUND_START_FILE", DEFAULT_SOUND_START_FILE)
+    stop_file: str = os.getenv("SOUND_STOP_FILE", DEFAULT_SOUND_STOP_FILE)
 
 @dataclass(frozen=True)
 class AppConfig:
@@ -103,6 +116,7 @@ class AppConfig:
     stt: STTConfig = field(default_factory=STTConfig)
     tts: TTSConfig = field(default_factory=TTSConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
+    sound: SoundConfig = field(default_factory=SoundConfig)
 
 # Default global configuration instance
 config = AppConfig()

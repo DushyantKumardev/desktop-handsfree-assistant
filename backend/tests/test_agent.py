@@ -29,10 +29,25 @@ def main() -> None:
 
     for q in test_queries:
         print(f"\n[QUERY]: \"{q}\"")
-        res = dispatcher.process_command(q)
-        print(f"  -> Action:       {res.action}")
-        print(f"  -> Target:       {res.target}")
-        print(f"  -> Speech Reply: \"{res.speech_reply}\"")
+        print("  -> Streaming Tokens: ", end="", flush=True)
+
+        early_reply_captured = None
+
+        def on_reply(text: str) -> None:
+            nonlocal early_reply_captured
+            early_reply_captured = text
+
+        res = dispatcher.process_command(
+            q,
+            on_reply_ready=on_reply,
+            on_token=lambda tok: print(tok, end="", flush=True),
+        )
+        print()  # newline
+        print(f"  -> Early Reply Ready: \"{early_reply_captured}\"")
+        print(f"  -> Action:           {res.action}")
+        print(f"  -> Target:           {res.target}")
+        print(f"  -> Final Reply:      \"{res.speech_reply}\"")
+
 
     print("\n" + "=" * 65)
     print("[SUCCESS] Intent Dispatcher test complete!")

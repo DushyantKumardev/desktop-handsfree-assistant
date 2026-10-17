@@ -44,6 +44,13 @@ python tests/test_tts.py
 # LLM Intent Dispatcher test
 python tests/test_agent.py
 
-# Complete LLM Voice Loop (WakeWord -> VAD -> STT -> LLM -> TTS)
+# Audio Feedback Chime test
+python tests/test_feedback.py
+
+# Desktop OS Automation Action Executor test
+python tests/test_automation.py
+
+# Complete LLM & Action Voice Loop (WakeWord -> VAD -> STT -> LLM -> OS Action -> TTS)
 python tests/test_assistant_pipeline.py
 ```
+
