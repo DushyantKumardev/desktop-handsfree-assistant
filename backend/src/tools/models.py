@@ -17,3 +17,4 @@ class LLMResponse:
     spoken_reply: str
     tool_calls: list[ToolCall] = field(default_factory=list)
     raw_query: str = ""
+    needs_followup: bool = False

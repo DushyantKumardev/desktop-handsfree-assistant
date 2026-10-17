@@ -10,6 +10,8 @@ from src.tools import DESKTOP_TOOLS, ToolCall, LLMResponse
 
 logger = logging.getLogger(__name__)
 
+FOLLOWUP_TAG_REGEX = re.compile(r"<\s*follow_?up(?:\s*\/|\s*>.*?<\/\s*follow_?up\s*|\s*\/?>)", re.IGNORECASE)
+
 SYSTEM_PROMPT = """You are the voice brain of a desktop computer. You control the OS with tools.
 
 Always speak a short natural sentence FIRST before any tool call. Never stay silent.
@@ -24,6 +26,11 @@ Then call the right tool:
 - speak faster / slower / speed up / slow down / normal speed → set_speaking_speed
 
 Pure chat or greetings → just reply naturally in 1-3 sentences. No tools.
+
+Follow-up taking:
+When you ask the user a question, need clarification, want more details, or expect a response to continue the conversation, append `<followup/>` at the very end of your response.
+When you include `<followup/>`, the system will automatically reopen the microphone so the user can speak their reply without having to say the wake word again.
+Only append `<followup/>` when you genuinely ask a question or expect an immediate reply. Do not append it for simple factual answers or completed actions.
 
 Everything you say goes straight to TTS. Speak only clean plain sentences. No markdown, no asterisks, no bullets, no emojis, no symbols.
 
@@ -41,11 +48,16 @@ class LLMBrain:
             api_key=self.config.api_key,
             timeout=10.0,
         )
+        self.conversation_history: list[dict[str, str]] = []
         logger.info(
             "LLMBrain initialized with tools: %s (Model: %s)",
             self.config.base_url,
             self.config.model,
         )
+
+    def reset_conversation(self) -> None:
+        """Clears recent conversation history."""
+        self.conversation_history.clear()
 
     def process_command(
         self,
@@ -57,20 +69,26 @@ class LLMBrain:
         """
         Processes user query with the LLM.
         - Streams spoken sentences dynamically via on_sentence_ready as they complete.
-        - Collects any requested ToolCalls and returns LLMResponse(spoken_reply, tool_calls).
+        - Detects <followup/> XML tag to automatically trigger listening cycle.
+        - Collects any requested ToolCalls and returns LLMResponse.
         """
         if not user_query.strip():
-            return LLMResponse(spoken_reply="I did not catch that.", tool_calls=[], raw_query="")
+            return LLMResponse(spoken_reply="I did not catch that.", tool_calls=[], raw_query="", needs_followup=False)
 
         # Ensure max_tokens has at least 450 tokens to prevent cutting off multi-sentence answers
         effective_max_tokens = max(self.config.max_tokens, 450)
 
+        # Build message payload with conversation memory
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+        ]
+        # Include last 8 conversational turns (4 pairs) for coherent follow-ups
+        messages.extend(self.conversation_history[-8:])
+        messages.append({"role": "user", "content": user_query})
+
         request_kwargs: dict[str, Any] = {
             "model": self.config.model,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_query},
-            ],
+            "messages": messages,
             "tools": DESKTOP_TOOLS,
             "tool_choice": "auto",
             "temperature": self.config.temperature,
@@ -114,14 +132,18 @@ class LLMBrain:
                         while True:
                             match = re.search(r"^([\s\S]*?[.!?\n])(\s+[\s\S]*|$)", buf_text)
                             if match and match.group(1).strip():
-                                sentence = match.group(1).strip()
+                                raw_sentence = match.group(1).strip()
                                 buf_text = match.group(2).lstrip()
-                                if callable(on_sentence_ready):
-                                    on_sentence_ready(sentence)
-                                if not first_sentence_emitted:
-                                    first_sentence_emitted = True
-                                    if callable(on_reply_ready):
-                                        on_reply_ready(sentence)
+                                # Clean XML tags and followup tags so they are not sent to TTS or UI chunk
+                                clean_sentence = FOLLOWUP_TAG_REGEX.sub("", raw_sentence)
+                                clean_sentence = re.sub(r"<[^>]+>", "", clean_sentence).strip()
+                                if clean_sentence:
+                                    if callable(on_sentence_ready):
+                                        on_sentence_ready(clean_sentence)
+                                    if not first_sentence_emitted:
+                                        first_sentence_emitted = True
+                                        if callable(on_reply_ready):
+                                            on_reply_ready(clean_sentence)
                             else:
                                 break
                         sentence_buffer = [buf_text] if buf_text else []
@@ -143,16 +165,22 @@ class LLMBrain:
                                     tool_calls_dict[idx]["arguments"] += tc.function.arguments
 
             # Flush any remaining un-yielded sentence from buffer
-            remaining_sentence = "".join(sentence_buffer).strip()
-            if remaining_sentence:
-                if callable(on_sentence_ready):
-                    on_sentence_ready(remaining_sentence)
-                if not first_sentence_emitted:
-                    first_sentence_emitted = True
-                    if callable(on_reply_ready):
-                        on_reply_ready(remaining_sentence)
+            remaining_raw = "".join(sentence_buffer).strip()
+            if remaining_raw:
+                remaining_clean = FOLLOWUP_TAG_REGEX.sub("", remaining_raw)
+                remaining_clean = re.sub(r"<[^>]+>", "", remaining_clean).strip()
+                if remaining_clean:
+                    if callable(on_sentence_ready):
+                        on_sentence_ready(remaining_clean)
+                    if not first_sentence_emitted:
+                        first_sentence_emitted = True
+                        if callable(on_reply_ready):
+                            on_reply_ready(remaining_clean)
 
-            full_speech = "".join(content_tokens).strip()
+            raw_speech = "".join(content_tokens).strip()
+            has_followup = bool(FOLLOWUP_TAG_REGEX.search(raw_speech))
+            clean_speech = FOLLOWUP_TAG_REGEX.sub("", raw_speech)
+            clean_speech = re.sub(r"<[^>]+>", "", clean_speech).strip()
 
             # 3. Collect tool calls
             collected_tools: list[ToolCall] = []
@@ -167,19 +195,28 @@ class LLMBrain:
                 collected_tools.append(ToolCall(name=t_name, args=t_args))
 
             # If LLM called tools without speaking connecting text, provide default phrase
-            if collected_tools and not full_speech:
+            if collected_tools and not clean_speech:
                 first_tool = collected_tools[0]
-                full_speech = self._generate_default_phrase(first_tool.name, first_tool.args)
-                if full_speech:
+                clean_speech = self._generate_default_phrase(first_tool.name, first_tool.args)
+                if clean_speech:
                     if callable(on_sentence_ready):
-                        on_sentence_ready(full_speech)
+                        on_sentence_ready(clean_speech)
                     if not first_sentence_emitted and callable(on_reply_ready):
-                        on_reply_ready(full_speech)
+                        on_reply_ready(clean_speech)
+
+            final_reply = clean_speech or "Hello! How can I assist you?"
+
+            # Append to persistent conversational memory
+            self.conversation_history.append({"role": "user", "content": user_query})
+            self.conversation_history.append({"role": "assistant", "content": final_reply})
+            if len(self.conversation_history) > 12:
+                self.conversation_history = self.conversation_history[-12:]
 
             return LLMResponse(
-                spoken_reply=full_speech or "Hello! How can I assist you?",
+                spoken_reply=final_reply,
                 tool_calls=collected_tools,
                 raw_query=user_query,
+                needs_followup=has_followup,
             )
 
         except Exception as e:

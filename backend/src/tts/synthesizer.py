@@ -77,6 +77,7 @@ class TTSSynthesizer:
         cleaned = re.sub(r"#{1,6}\s*", "", cleaned)  # Headers
         cleaned = re.sub(r"`[^`]*`", "", cleaned)     # Code blocks
         cleaned = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", cleaned)  # Links
+        cleaned = re.sub(r"<[^>]+>", "", cleaned)     # Strip XML/HTML tags like <followup/>
         cleaned = re.sub(r"[\*#~`>]", "", cleaned)
         # Normalize non-breaking and narrow unicode spaces (e.g. \u202f, \u00a0)
         cleaned = re.sub(r"[\u00a0\u202f\u200b]", " ", cleaned)

@@ -10,4 +10,5 @@ piper-tts>=1.8.0
 openai>=1.0.0
 pytest>=8.0.0
 duckduckgo_search>=7.0.0
+websockets>=12.0
 

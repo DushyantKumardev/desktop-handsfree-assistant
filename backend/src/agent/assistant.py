@@ -23,6 +23,7 @@ from src.stt.transcriber import STTTranscriber
 from src.agent.brain import LLMBrain
 from src.automation.executor import ActionExecutor
 from src.tts.synthesizer import TTSSynthesizer
+from src.server.ws_server import ws_server
 
 logger = logging.getLogger("assistant")
 
@@ -43,6 +44,15 @@ class HandsfreeAssistant:
         self.brain = LLMBrain(config.llm)
         self.executor = ActionExecutor()
         self.tts = TTSSynthesizer(config.tts)
+
+        # Connect WebSocket broadcast server for frontend overlay
+        ws_server.on_trigger_listen = lambda: setattr(self, "_wake_triggered", True)
+        def handle_cancel():
+            self._wake_triggered = False
+            self.brain.reset_conversation()
+            self._reset_and_listen()
+        ws_server.on_cancel_requested = handle_cancel
+        ws_server.start()
 
         self._print_banner()
         print(f"[+] All engines initialized in {time.time() - t0:.2f}s!\n")
@@ -110,6 +120,8 @@ class HandsfreeAssistant:
     def _on_wake_detected(self, model_name: str, confidence: float) -> None:
         """Callback fired when wake word is detected."""
         self._wake_triggered = True
+        ws_server.broadcast_show_widget()
+        ws_server.broadcast_state("listening")
 
     def start(self) -> None:
         """Starts the assistant event loop."""
@@ -131,6 +143,7 @@ class HandsfreeAssistant:
         print("[IDLE] Waiting for wake word...\n")
 
         try:
+            is_followup = False
             while self.running:
                 if not self._wake_triggered:
                     time.sleep(0.02)
@@ -139,7 +152,15 @@ class HandsfreeAssistant:
                 # 1. Immediately pause wake word detection to prevent false triggers during command/speech
                 self.detector.stop_listening()
                 self._wake_triggered = False
-                print("\n>>> [WAKE WORD DETECTED!]")
+
+                if is_followup:
+                    print("\n>>> [FOLLOW-UP LISTENING CYCLE ACTIVATED]")
+                    ws_server.broadcast_show_widget()
+                    ws_server.broadcast_state("listening", is_followup=True)
+                else:
+                    print("\n>>> [WAKE WORD DETECTED!]")
+                    ws_server.broadcast_show_widget()
+                    ws_server.broadcast_state("listening", is_followup=False)
 
                 # 2. Play listening sound cue and flush microphone buffer
                 self.sounds.play_start()
@@ -152,16 +173,29 @@ class HandsfreeAssistant:
 
                 # 4. Transcribe speech using Whisper
                 print("[+] Processing STT...", flush=True)
+                ws_server.broadcast_state("thinking")
                 t_stt = time.time()
                 user_text = self.stt.transcribe(command_audio)
                 stt_latency = time.time() - t_stt
 
                 if not user_text:
+                    if is_followup:
+                        print("[FOLLOW-UP] No speech heard for follow-up question. Ending turn.\n")
+                        is_followup = False
+                        ws_server.broadcast_state("idle")
+                        self._reset_and_listen()
+                        continue
                     self.tts.speak("I could not hear anything.")
+                    ws_server.broadcast_state("idle")
                     self._reset_and_listen()
                     continue
 
-                print(f">>> [USER]: \"{user_text}\" ({stt_latency:.2f}s)")
+                turn_label = " (FOLLOW-UP)" if is_followup else ""
+                print(f">>> [USER{turn_label}]: \"{user_text}\" ({stt_latency:.2f}s)")
+                ws_server.broadcast_transcription(user_text)
+
+                # Reset follow-up status for current processing turn
+                is_followup = False
 
                 # 5. LLM Brain with Live Token Streaming & Tool Collection
                 t_llm = time.time()
@@ -191,6 +225,10 @@ class HandsfreeAssistant:
                     cleaned = TTSSynthesizer.clean_spoken_text(sentence)
                     if not cleaned:
                         return
+                    # Broadcast each sentence chunk to frontend in real time
+                    ws_server.broadcast_state("speaking")
+                    ws_server.broadcast_stream_chunk(cleaned, user_text)
+
                     # If user is asking for clock time, let the executor provide exact ground truth
                     if any(w in user_text.lower() for w in ("time", "samay", "baj", "waqt", "date", "tarikh")):
                         return
@@ -219,6 +257,7 @@ class HandsfreeAssistant:
                             first_speech = False
                             clean_eng = TTSSynthesizer.clean_spoken_text(engagement)
                             print(f">>> [ENGAGEMENT]: \"{clean_eng}\"")
+                            ws_server.broadcast_stream_chunk(clean_eng, user_text)
                             speech_queue.put(clean_eng)
 
                     exec_results = self.executor.execute_tools(llm_resp.tool_calls)
@@ -226,6 +265,7 @@ class HandsfreeAssistant:
                         if res.spoken_override:
                             clean_override = TTSSynthesizer.clean_spoken_text(res.spoken_override)
                             print(f">>> [RESULT]: \"{clean_override}\"")
+                            ws_server.broadcast_stream_chunk(clean_override, user_text)
                             speech_queue.put(clean_override)
                 elif first_speech and clean_reply:
                     speech_queue.put(clean_reply)
@@ -234,7 +274,21 @@ class HandsfreeAssistant:
                 speech_queue.put(None)
                 tts_thread.join()
 
-                self._reset_and_listen()
+                # Signal completion to frontend
+                ws_server.broadcast_response_complete(
+                    user_text,
+                    clean_reply or "Action completed.",
+                    needs_followup=llm_resp.needs_followup,
+                )
+
+                if llm_resp.needs_followup:
+                    print(">>> [AI REQUESTED FOLLOW-UP (<followup/> detected)]")
+                    time.sleep(0.35)
+                    self.mic.flush_queue()
+                    is_followup = True
+                    self._wake_triggered = True
+                else:
+                    self._reset_and_listen()
 
         except KeyboardInterrupt:
             print("\n[*] Stopping assistant...")
