@@ -2,13 +2,21 @@
 .lite_workspace.lua
 
 # Neutralinojs binaries and builds
-/bin
-/dist
+bin/
+/bin/
+dist/
+/dist/
+
+# Bundled & template frontend files (keep only icons/)
+resources/*
+!resources/icons/
+!resources/icons/**
 
 # Neutralinojs client (minified)
 neutralino.js
 
-# Neutralinojs related files
-.storage
+# Neutralinojs runtime & logs
+.storage/
 .tmp/
 *.log
+neutralinojs.log

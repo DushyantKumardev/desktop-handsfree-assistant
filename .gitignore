@@ -83,4 +83,17 @@ temp/
 .tmp/
 *.wav
 backend/data/
+release/
+bundle.ps1
+bundle.ps*
+
+# Neutralino Desktop App Build Artifacts
+app/bin/
+app/dist/
+app/.tmp/
+app/*.log
+app/neutralinojs.log
+app/resources/*
+!app/resources/icons/
+!app/resources/icons/**
 
