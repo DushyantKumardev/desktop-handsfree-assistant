@@ -80,6 +80,7 @@ logs/
 *.log
 tmp/
 temp/
+.tmp/
 *.wav
 backend/data/
 
