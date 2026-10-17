@@ -13,6 +13,7 @@ import {
   type ConnectionStatus,
 } from "./services/websocket";
 import type { AssistantState, AssistantResponse, WSMessage } from "./types/assistant";
+import { UI_MESSAGES } from "./constants/messages";
 
 export default function App() {
   const [state, setState] = useState<AssistantState>("idle");
@@ -73,7 +74,7 @@ export default function App() {
         case "SERVER_STREAM_CHUNK": {
           const payload = msg.payload as { chunk?: string; query?: string };
           if (payload?.chunk) {
-            const queryText = payload.query || currentQueryRef.current || "Voice Request";
+            const queryText = payload.query || currentQueryRef.current || UI_MESSAGES.DEFAULT_QUERY_TITLE;
             setResponse((prev) => {
               if (!prev) {
                 return {
@@ -81,7 +82,7 @@ export default function App() {
                   query: queryText,
                   content: payload.chunk || "",
                   isStreaming: true,
-                  timestamp: "Just now",
+                  timestamp: UI_MESSAGES.JUST_NOW,
                 };
               }
               return {
@@ -99,10 +100,10 @@ export default function App() {
           const payload = msg.payload as { query?: string; content?: string; needs_followup?: boolean };
           setResponse((prev) => ({
             id: prev?.id || Date.now().toString(),
-            query: payload?.query || prev?.query || currentQueryRef.current || "Voice Request",
+            query: payload?.query || prev?.query || currentQueryRef.current || UI_MESSAGES.DEFAULT_QUERY_TITLE,
             content: payload?.content || prev?.content || "",
             isStreaming: false,
-            timestamp: "Just now",
+            timestamp: UI_MESSAGES.JUST_NOW,
           }));
           if (!payload?.needs_followup) {
             setState("idle");

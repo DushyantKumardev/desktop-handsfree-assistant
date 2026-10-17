@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Mic, Square, Radio } from "lucide-react";
 import { BackgroundWaveform } from "./BackgroundWaveform";
 import type { AssistantState } from "../../types/assistant";
+import { UI_MESSAGES } from "../../constants/messages";
 
 interface FloatingPillProps {
   state: AssistantState;
@@ -25,7 +26,7 @@ const STATE_CONFIG = {
     waveColor:  "rgba(167, 139, 250, 1)",  // violet-400
     orbColor:   "rgba(124, 77, 255, 0.40)",
     intensity:  0.6,
-    label:      "Just a sec…",
+    label:      UI_MESSAGES.THINKING,
     textColor:  "text-white/60",
   },
   speaking: {
@@ -175,10 +176,10 @@ export const FloatingPill: React.FC<FloatingPillProps> = ({
             }`}
             title={
               connectionStatus === "connected"
-                ? "Backend connected"
+                ? UI_MESSAGES.CONNECTED
                 : connectionStatus === "connecting"
-                ? "Connecting…"
-                : "Backend offline"
+                ? UI_MESSAGES.CONNECTING
+                : UI_MESSAGES.OFFLINE
             }
           />
         </div>
@@ -206,7 +207,7 @@ export const FloatingPill: React.FC<FloatingPillProps> = ({
                   transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
                   className="text-[12px] text-amber-200/70 font-light tracking-wide"
                 >
-                  {isFollowup ? "Listening for reply…" : "Listening…"}
+                  {isFollowup ? UI_MESSAGES.LISTENING_FOLLOWUP : UI_MESSAGES.LISTENING}
                 </motion.span>
               )}
             </motion.div>
@@ -223,7 +224,7 @@ export const FloatingPill: React.FC<FloatingPillProps> = ({
                 transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                 className="text-[12px] text-white/65 font-light tracking-wide"
               >
-                Just a sec…
+                {UI_MESSAGES.THINKING}
               </motion.span>
             </motion.div>
           ) : isSpeaking ? (
@@ -239,7 +240,7 @@ export const FloatingPill: React.FC<FloatingPillProps> = ({
                 transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
                 className="text-[12px] text-emerald-200/80 font-light tracking-wide"
               >
-                Speaking…
+                {UI_MESSAGES.SPEAKING}
               </motion.span>
             </motion.div>
           ) : (
@@ -252,8 +253,8 @@ export const FloatingPill: React.FC<FloatingPillProps> = ({
               className="text-[12px] text-white/28 tracking-wide font-light"
             >
               {connectionStatus === "connected"
-                ? "Say the wake word or tap mic"
-                : "Waiting for backend…"}
+                ? UI_MESSAGES.IDLE_PROMPT
+                : UI_MESSAGES.WAITING_FOR_BACKEND}
             </motion.span>
           )}
         </AnimatePresence>
@@ -268,7 +269,7 @@ export const FloatingPill: React.FC<FloatingPillProps> = ({
         whileTap={{ scale: 0.92 }}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={onToggleMic}
-        title={isActive ? "Stop" : "Start voice input"}
+        title={isActive ? UI_MESSAGES.MIC_STOP : UI_MESSAGES.MIC_START}
         type="button"
       >
         <AnimatePresence mode="wait">

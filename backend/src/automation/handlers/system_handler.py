@@ -3,6 +3,7 @@
 import ctypes
 import logging
 import re
+from src.core.messages import ActionMessages, ErrorMessages
 from src.automation.models import ExecutionResult
 
 logger = logging.getLogger(__name__)
@@ -40,51 +41,51 @@ class SystemHandler:
                 return ExecutionResult(
                     success=success,
                     action="system_control",
-                    message=f"Master volume set to {percent}%.",
+                    message=ActionMessages.VOLUME_SET.format(percent=percent),
                 )
 
             elif "volume_up" in cmd or "up" in cmd or "badhao" in cmd:
                 for _ in range(5):  # 5 steps volume up (~10%)
                     cls._send_virtual_key(VK_VOLUME_UP)
-                return ExecutionResult(success=True, action="system_control", message="Volume increased.")
+                return ExecutionResult(success=True, action="system_control", message=ActionMessages.VOLUME_INCREASED)
 
             elif "volume_down" in cmd or "down" in cmd or "kam" in cmd:
                 for _ in range(5):  # 5 steps volume down (~10%)
                     cls._send_virtual_key(VK_VOLUME_DOWN)
-                return ExecutionResult(success=True, action="system_control", message="Volume decreased.")
+                return ExecutionResult(success=True, action="system_control", message=ActionMessages.VOLUME_DECREASED)
 
             elif "mute" in cmd or "chup" in cmd or "unmute" in cmd:
                 cls._send_virtual_key(VK_VOLUME_MUTE)
-                return ExecutionResult(success=True, action="system_control", message="Volume mute toggled.")
+                return ExecutionResult(success=True, action="system_control", message=ActionMessages.VOLUME_MUTED)
 
             elif cmd in ("next", "next_track", "next song", "agla gaana"):
                 cls._send_virtual_key(VK_MEDIA_NEXT_TRACK)
-                return ExecutionResult(success=True, action="system_control", message="Skipped to next track.")
+                return ExecutionResult(success=True, action="system_control", message=ActionMessages.TRACK_NEXT)
 
             elif cmd in ("prev", "previous", "previous_track", "prev_track", "pichhla gaana"):
                 cls._send_virtual_key(VK_MEDIA_PREV_TRACK)
-                return ExecutionResult(success=True, action="system_control", message="Returned to previous track.")
+                return ExecutionResult(success=True, action="system_control", message=ActionMessages.TRACK_PREV)
 
             elif any(w in cmd for w in ("play_pause", "pause", "resume", "media_toggle", "roko")) or cmd == "play":
                 cls._send_virtual_key(VK_MEDIA_PLAY_PAUSE)
-                return ExecutionResult(success=True, action="system_control", message="Media playback toggled.")
+                return ExecutionResult(success=True, action="system_control", message=ActionMessages.PLAYBACK_TOGGLED)
 
             elif "lock" in cmd:
                 ctypes.windll.user32.LockWorkStation()
-                return ExecutionResult(success=True, action="system_control", message="Computer locked.")
+                return ExecutionResult(success=True, action="system_control", message=ActionMessages.COMPUTER_LOCKED)
 
             else:
                 return ExecutionResult(
                     success=False,
                     action="system_control",
-                    message=f"Unknown system control target: {command}",
+                    message=ErrorMessages.SYSTEM_CONTROL_UNKNOWN.format(command=command),
                 )
         except Exception as e:
             logger.error("System control execution failed: %s", e)
             return ExecutionResult(
                 success=False,
                 action="system_control",
-                message=f"System control failed: {e}",
+                message=ErrorMessages.SYSTEM_CONTROL_FAILED.format(error=e),
             )
 
     @classmethod

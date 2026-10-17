@@ -36,8 +36,8 @@ class SoundFeedback:
         self._ensure_default_sounds()
 
         # Cache audio arrays in memory for instant, zero-latency playback
-        self._start_audio, self._start_sr = self._load_audio(self.start_sound_path, is_start_cue=True)
-        self._stop_audio, self._stop_sr = self._load_audio(self.stop_sound_path, is_start_cue=False)
+        self._start_audio, self._start_sr = self._load_audio(self.start_sound_path)
+        self._stop_audio, self._stop_sr = self._load_audio(self.stop_sound_path)
 
         logger.info(
             "SoundFeedback initialized (Start: %s, Stop: %s)",
@@ -81,78 +81,62 @@ class SoundFeedback:
         """Reload audio files from disk (useful if user replaced them)."""
         self.start_sound_path = self._resolve_sound_file(self.config.start_file, default_stem="start")
         self.stop_sound_path = self._resolve_sound_file(self.config.stop_file, default_stem="stop")
-        self._start_audio, self._start_sr = self._load_audio(self.start_sound_path, is_start_cue=True)
-        self._stop_audio, self._stop_sr = self._load_audio(self.stop_sound_path, is_start_cue=False)
+        self._start_audio, self._start_sr = self._load_audio(self.start_sound_path)
+        self._stop_audio, self._stop_sr = self._load_audio(self.stop_sound_path)
 
-    @staticmethod
-    def _trim_trailing_silence(audio: np.ndarray, sample_rate: int = 44100) -> np.ndarray:
-        """Trims dead silence from the end of an audio file so listening starts immediately."""
-        if audio is None or len(audio) == 0:
-            return audio
-
-        abs_audio = np.abs(audio)
-        peak = np.max(abs_audio)
-        if peak == 0:
-            return audio
-
-        # Identify sound frames above 2% of peak amplitude
-        thresh = max(peak * 0.02, 0.005 if audio.dtype == np.float32 else 200)
-        active_indices = np.where(abs_audio > thresh)[0]
-        if len(active_indices) > 0:
-            last_active = active_indices[-1]
-            # Keep a tiny 60ms decay buffer so it fades out naturally without abrupt clicks
-            end_idx = min(len(audio), last_active + int(sample_rate * 0.06))
-            return audio[:end_idx]
-
-        return audio
-
-    def _load_audio(self, file_path: Path, is_start_cue: bool = False) -> tuple[Optional[np.ndarray], int]:
-        """Loads an MP3, WAV, or other audio file into a numpy array."""
+    def _load_audio(self, file_path: Path) -> tuple[Optional[np.ndarray], int]:
+        """Loads a WAV, MP3, or other audio file into a numpy array with clean hardware padding."""
         if not file_path.exists():
             return None, 44100
 
         audio = None
         sample_rate = 44100
 
-        # 1. Use faster_whisper's bundled PyAV engine (decodes MP3, WAV, FLAC, OGG, AAC)
-        try:
-            from faster_whisper.audio import decode_audio
-            audio = decode_audio(str(file_path), sampling_rate=44100)
-            sample_rate = 44100
-        except Exception as e:
-            logger.debug("PyAV decode_audio failed for %s (%s). Trying wave fallback.", file_path, e)
+        # 1. Primary method for WAV files: direct lossless read via scipy.io.wavfile
+        if file_path.suffix.lower() == ".wav":
+            try:
+                from scipy.io import wavfile
+                sample_rate, audio = wavfile.read(str(file_path))
+            except Exception as e:
+                logger.debug("scipy.io.wavfile read failed for %s (%s). Trying wave module.", file_path, e)
+                try:
+                    with wave.open(str(file_path), "rb") as wf:
+                        sample_rate = wf.getframerate()
+                        num_frames = wf.getnframes()
+                        raw_bytes = wf.readframes(num_frames)
+                        sampwidth = wf.getsampwidth()
+                        num_channels = wf.getnchannels()
 
-        # 2. Standard library wave fallback for WAV files
+                        if sampwidth == 2:
+                            audio = np.frombuffer(raw_bytes, dtype=np.int16)
+                        elif sampwidth == 1:
+                            audio = (np.frombuffer(raw_bytes, dtype=np.uint8).astype(np.int16) - 128) * 256
+                        else:
+                            audio = np.frombuffer(raw_bytes, dtype=np.int16)
+
+                        if num_channels > 1:
+                            audio = audio.reshape(-1, num_channels)
+                except Exception as we:
+                    logger.error("wave fallback failed for %s: %s", file_path, we)
+
+        # 2. For MP3 / compressed formats, decode via PyAV
         if audio is None:
             try:
-                with wave.open(str(file_path), "rb") as wf:
-                    sample_rate = wf.getframerate()
-                    num_frames = wf.getnframes()
-                    raw_bytes = wf.readframes(num_frames)
-                    sampwidth = wf.getsampwidth()
-                    num_channels = wf.getnchannels()
-
-                    if sampwidth == 2:
-                        audio = np.frombuffer(raw_bytes, dtype=np.int16)
-                    elif sampwidth == 1:
-                        audio = (np.frombuffer(raw_bytes, dtype=np.uint8).astype(np.int16) - 128) * 256
-                    else:
-                        audio = np.frombuffer(raw_bytes, dtype=np.int16)
-
-                    if num_channels > 1:
-                        audio = audio.reshape(-1, num_channels)
+                from faster_whisper.audio import decode_audio
+                audio = decode_audio(str(file_path), sampling_rate=44100)
+                sample_rate = 44100
             except Exception as e:
-                logger.error("Failed to load audio file %s: %s", file_path, e)
+                logger.error("Failed to decode audio file %s: %s", file_path, e)
                 return None, 44100
 
+        # 3. Add 200ms tail silence padding so Windows DAC / DirectSound hardware buffer doesn't clip the audio tail
         if audio is not None and len(audio) > 0:
-            if is_start_cue:
-                # Trim dead silence from end so the assistant starts listening immediately
-                audio = self._trim_trailing_silence(audio, sample_rate)
+            pad_frames = int(sample_rate * 0.20)
+            if audio.ndim == 1:
+                padding = np.zeros(pad_frames, dtype=audio.dtype)
             else:
-                # For stop cue, add 250ms silence padding so DirectSound doesn't clip the audio tail
-                padding = np.zeros(int(sample_rate * 0.25), dtype=audio.dtype)
-                audio = np.concatenate([audio, padding])
+                padding = np.zeros((pad_frames, audio.shape[1]), dtype=audio.dtype)
+            audio = np.concatenate([audio, padding])
 
         return audio, sample_rate
 

@@ -1,41 +1,17 @@
-"""LLM Brain: The central intelligence of the desktop voice assistant."""
-
+import datetime
 import json
 import logging
 import re
 from typing import Any, Callable, Optional
 from openai import OpenAI
 from src.core.config import LLMConfig, config
+from src.core.constants import DEFAULT_SYSTEM_PROMPT
+from src.core.messages import AssistantResponses, ErrorMessages, ToolDefaultPhrases
 from src.tools import DESKTOP_TOOLS, ToolCall, LLMResponse
 
 logger = logging.getLogger(__name__)
 
 FOLLOWUP_TAG_REGEX = re.compile(r"<\s*follow_?up(?:\s*\/|\s*>.*?<\/\s*follow_?up\s*|\s*\/?>)", re.IGNORECASE)
-
-SYSTEM_PROMPT = """You are the voice brain of a desktop computer. You control the OS with tools.
-
-Always speak a short natural sentence FIRST before any tool call. Never stay silent.
-Examples: "Ahh got it, one sec.", "Looking that up for you.", "Opening that now.", "Checking the time."
-
-Then call the right tool:
-- search / who is / what is / latest news → web_search
-- play / open youtube and play → play_media
-- open chrome / notepad / youtube → open_app
-- time / date → get_time_date
-- volume / mute / pause / next → set_volume / mute_volume / media_control
-- speak faster / slower / speed up / slow down / normal speed → set_speaking_speed
-
-Pure chat or greetings → just reply naturally in 1-3 sentences. No tools.
-
-Follow-up taking:
-When you ask the user a question, need clarification, want more details, or expect a response to continue the conversation, append `<followup/>` at the very end of your response.
-When you include `<followup/>`, the system will automatically reopen the microphone so the user can speak their reply without having to say the wake word again.
-Only append `<followup/>` when you genuinely ask a question or expect an immediate reply. Do not append it for simple factual answers or completed actions.
-
-Everything you say goes straight to TTS. Speak only clean plain sentences. No markdown, no asterisks, no bullets, no emojis, no symbols.
-
-Support English, Hindi and Hinglish naturally.
-"""
 
 
 class LLMBrain:
@@ -73,17 +49,18 @@ class LLMBrain:
         - Collects any requested ToolCalls and returns LLMResponse.
         """
         if not user_query.strip():
-            return LLMResponse(spoken_reply="I did not catch that.", tool_calls=[], raw_query="", needs_followup=False)
+            return LLMResponse(spoken_reply=AssistantResponses.EMPTY_QUERY, tool_calls=[], raw_query="", needs_followup=False)
 
-        # Ensure max_tokens has at least 450 tokens to prevent cutting off multi-sentence answers
-        effective_max_tokens = max(self.config.max_tokens, 450)
+        # Inject real-time system clock and date directly into system prompt
+        now_str = datetime.datetime.now().strftime("%I:%M %p, %A, %B %d, %Y").lstrip("0")
+        prompt_content = DEFAULT_SYSTEM_PROMPT.format(current_time=now_str)
 
         # Build message payload with conversation memory
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": prompt_content},
         ]
-        # Include last 8 conversational turns (4 pairs) for coherent follow-ups
-        messages.extend(self.conversation_history[-8:])
+        # Include last 4 conversational turns (2 pairs) for fast context with minimal tokens
+        messages.extend(self.conversation_history[-4:])
         messages.append({"role": "user", "content": user_query})
 
         request_kwargs: dict[str, Any] = {
@@ -92,7 +69,7 @@ class LLMBrain:
             "tools": DESKTOP_TOOLS,
             "tool_choice": "auto",
             "temperature": self.config.temperature,
-            "max_tokens": effective_max_tokens,
+            "max_tokens": self.config.max_tokens,
             "stream": True,
         }
 
@@ -204,7 +181,7 @@ class LLMBrain:
                     if not first_sentence_emitted and callable(on_reply_ready):
                         on_reply_ready(clean_speech)
 
-            final_reply = clean_speech or "Hello! How can I assist you?"
+            final_reply = clean_speech or AssistantResponses.DEFAULT_GREETING
 
             # Append to persistent conversational memory
             self.conversation_history.append({"role": "user", "content": user_query})
@@ -221,7 +198,7 @@ class LLMBrain:
 
         except Exception as e:
             logger.error("LLM inference failed: %s", e, exc_info=True)
-            fallback_text = "I encountered an error reaching the assistant brain."
+            fallback_text = ErrorMessages.LLM_INFERENCE_ERROR
             if callable(on_reply_ready):
                 on_reply_ready(fallback_text)
             return LLMResponse(
@@ -234,26 +211,24 @@ class LLMBrain:
     def _generate_default_phrase(tool_name: str, args: dict[str, Any]) -> str:
         """Fallback phrase if model was silent when requesting a tool."""
         if tool_name == "open_app":
-            return f"Opening {args.get('app_name', 'application')}."
+            return ToolDefaultPhrases.OPEN_APP.format(app=args.get("app_name", "application"))
         elif tool_name == "play_media":
             q = args.get("query", "")
-            return f"Playing {q} on YouTube." if q else "Opening YouTube."
+            return ToolDefaultPhrases.PLAY_MEDIA.format(query=q) if q else ToolDefaultPhrases.PLAY_MEDIA_DEFAULT
         elif tool_name == "media_control":
-            return "Skipping track." if args.get("command") == "next_track" else "Toggling playback."
+            return ToolDefaultPhrases.MEDIA_CONTROL_NEXT if args.get("command") == "next_track" else ToolDefaultPhrases.MEDIA_CONTROL_TOGGLE
         elif tool_name == "set_volume":
-            return f"Setting volume to {args.get('level', 50)} percent."
+            return ToolDefaultPhrases.SET_VOLUME.format(level=args.get("level", 50))
         elif tool_name == "adjust_volume":
-            return f"Turning volume {args.get('direction', 'up')}."
+            return ToolDefaultPhrases.ADJUST_VOLUME.format(direction=args.get("direction", "up"))
         elif tool_name == "mute_volume":
-            return "Toggling mute."
-        elif tool_name == "get_time_date":
-            return "Checking the time."
+            return ToolDefaultPhrases.MUTE_VOLUME
         elif tool_name == "lock_computer":
-            return "Locking your computer."
+            return ToolDefaultPhrases.LOCK_COMPUTER
         elif tool_name == "web_search":
             q = args.get("query", "")
-            return f"Searching for {q}." if q else "Searching the web."
+            return ToolDefaultPhrases.WEB_SEARCH.format(query=q) if q else ToolDefaultPhrases.WEB_SEARCH_DEFAULT
         elif tool_name == "set_speaking_speed":
             # Let the tool's spoken override speak at the new speed directly
             return ""
-        return "Right away."
+        return AssistantResponses.DEFAULT_FALLBACK

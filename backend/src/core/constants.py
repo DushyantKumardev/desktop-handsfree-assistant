@@ -86,11 +86,20 @@ DEFAULT_LLM_API_KEY = "ollama"
 # Sampling temperature (low temperature = deterministic intent extraction)
 DEFAULT_LLM_TEMPERATURE = 0.2
 
-# Maximum output tokens (keeps response snappy without cutting off multi-sentence answers)
-DEFAULT_LLM_MAX_TOKENS = 280
+# Maximum output tokens (keeps response snappy and token-efficient)
+DEFAULT_LLM_MAX_TOKENS = 180
 
 # Reasoning effort for reasoning models ('low', 'none', 'off' to disable thinking delay)
 DEFAULT_LLM_REASONING_EFFORT = "low"
+
+# System prompt for LLM Voice Brain (concise to minimize latency and token consumption)
+DEFAULT_SYSTEM_PROMPT = (
+    "Voice assistant for desktop. Speak 1-2 clean conversational sentences for direct TTS. "
+    "No markdown, bullets, or emojis. Supports English, Hindi, Hinglish. "
+    "Current time: {current_time}. "
+    "If calling a tool, speak a brief natural acknowledgement first. "
+    "Append '<followup/>' at the end ONLY when asking a question or expecting an immediate reply."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -98,12 +107,22 @@ DEFAULT_LLM_REASONING_EFFORT = "low"
 # ---------------------------------------------------------------------------
 # Filenames for start/stop sound cues in backend/assets/sounds/
 # Changeable to any filename or extension (e.g. .mp3, .wav, .ogg)
-DEFAULT_SOUND_START_FILE = "start.mp3"
-DEFAULT_SOUND_STOP_FILE = "stop.mp3"
+DEFAULT_SOUND_START_FILE = "start.wav"
+DEFAULT_SOUND_STOP_FILE = "stop.wav"
 
 # ---------------------------------------------------------------------------
 # Application Constants
 # ---------------------------------------------------------------------------
 DEFAULT_APP_ENV = "development"
 DEFAULT_DEBUG = True
+
+# Re-export message constants
+from .messages import (
+    ErrorMessages,
+    AssistantResponses,
+    ToolEngagementPhrases,
+    ToolDefaultPhrases,
+    ActionMessages,
+    SpeakingSpeedMessages,
+)
 

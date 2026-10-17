@@ -8,6 +8,7 @@ import urllib.request
 import webbrowser
 from typing import Optional
 from src.core.config import config
+from src.core.messages import ActionMessages, ErrorMessages
 from src.automation.models import ExecutionResult
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,7 @@ class WebHandler:
             return ExecutionResult(
                 success=True,
                 action="web_search",
-                message=f"Retrieved web search results for '{clean_q}'.",
+                message=ActionMessages.WEB_SEARCH_RETRIEVED.format(query=clean_q),
                 spoken_override=summary,
             )
 
@@ -193,11 +194,11 @@ class WebHandler:
 
         if not clean_q:
             url = "https://www.youtube.com"
-            msg = "Opened YouTube in browser."
+            msg = ActionMessages.YOUTUBE_OPENED
         else:
             encoded = urllib.parse.quote_plus(clean_q)
             url = f"https://www.youtube.com/results?search_query={encoded}"
-            msg = f"Opened YouTube search for '{clean_q}'."
+            msg = ActionMessages.YOUTUBE_SEARCH_OPENED.format(query=clean_q)
 
         try:
             webbrowser.open(url)
@@ -211,7 +212,7 @@ class WebHandler:
             return ExecutionResult(
                 success=False,
                 action="web_search",
-                message=f"Could not open browser: {e}",
+                message=ErrorMessages.BROWSER_OPEN_FAILED.format(error=e),
             )
 
     @classmethod
@@ -224,14 +225,14 @@ class WebHandler:
             return ExecutionResult(
                 success=True,
                 action="web_search",
-                message=f"Opened Google search for '{query}'.",
+                message=ActionMessages.GOOGLE_SEARCH_OPENED.format(query=query),
             )
         except Exception as e:
             logger.error("Failed to open browser: %s", e)
             return ExecutionResult(
                 success=False,
                 action="web_search",
-                message=f"Could not open browser: {e}",
+                message=ErrorMessages.BROWSER_OPEN_FAILED.format(error=e),
             )
 
     @classmethod

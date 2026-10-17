@@ -2,6 +2,7 @@
 
 import logging
 from typing import Any, Callable
+from src.core.messages import ErrorMessages
 from src.automation.models import ExecutionResult
 from .handlers import ALL_TOOL_MODULES
 
@@ -44,7 +45,7 @@ class ToolRegistry:
             return ExecutionResult(
                 success=False,
                 action=tool_name,
-                message=f"Unknown tool '{tool_name}'."
+                message=ErrorMessages.UNKNOWN_TOOL.format(tool_name=tool_name),
             )
 
         logger.info("Executing tool '%s' with args: %s", tool_name, args)
@@ -55,12 +56,12 @@ class ToolRegistry:
             return ExecutionResult(
                 success=False,
                 action=tool_name,
-                message=f"Invalid arguments for {tool_name}: {te}"
+                message=ErrorMessages.INVALID_TOOL_ARGS.format(tool_name=tool_name, error=te),
             )
         except Exception as e:
             logger.error("Failed to execute tool '%s': %s", tool_name, e)
             return ExecutionResult(
                 success=False,
                 action=tool_name,
-                message=f"Error executing {tool_name}: {e}"
+                message=ErrorMessages.TOOL_EXECUTION_ERROR.format(tool_name=tool_name, error=e),
             )

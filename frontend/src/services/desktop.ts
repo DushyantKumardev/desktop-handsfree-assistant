@@ -128,8 +128,8 @@ export const handleWindowDrag = async (e: React.MouseEvent): Promise<void> => {
     startScreenY = e.screenY;
 
     const pos = await Neutralino.window.getPosition();
-    initialWindowX = pos.x;
-    initialWindowY = pos.y;
+    initialWindowX = pos.x ?? 0;
+    initialWindowY = pos.y ?? 0;
 
     const cleanup = () => {
       isDragging = false;
@@ -167,11 +167,15 @@ export const setWindowSize = async (width: number, height: number): Promise<void
         Neutralino.window.getPosition(),
         Neutralino.window.getSize(),
       ]);
-      const deltaH = height - size.height;
+      const currentX = pos.x ?? 0;
+      const currentY = pos.y ?? 0;
+      const currentH = size.height ?? height;
+      const deltaH = height - currentH;
+
       // Resize first, then shift Y so the bottom edge (pill) stays put
       await Neutralino.window.setSize({ width, height });
       if (deltaH !== 0) {
-        await Neutralino.window.move(pos.x, pos.y - deltaH);
+        await Neutralino.window.move(currentX, currentY - deltaH);
       }
     } catch (err) {
       console.warn('[Desktop] Failed to resize window:', err);

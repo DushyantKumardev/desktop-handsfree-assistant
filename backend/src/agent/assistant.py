@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from src.core.config import config
+from src.core.messages import AssistantResponses, ToolEngagementPhrases
 from src.audio.capture import AudioCapture
 from src.audio.recorder import AudioRecorder
 from src.audio.feedback import SoundFeedback
@@ -77,45 +78,29 @@ class HandsfreeAssistant:
 
         if name == "web_search":
             if is_hindi:
-                options = [
-                    "Main abhi internet par check karke batata hoon, ek second.",
-                    "Dekhta hoon, online search kar raha hoon, ek pal dijiye.",
-                    "Iske baare mein abhi search karta hoon, bas ek second.",
-                ]
+                options = ToolEngagementPhrases.WEB_SEARCH_HINDI
             else:
                 if query:
                     clean_q = re.sub(r"[^\w\s]", "", query)
-                    options = [
-                        f"Let me check the web for {clean_q}, give me just a moment.",
-                        f"Looking that up on the web for you right now, one second.",
-                        f"Searching online for {clean_q}, give me a second.",
-                        f"Let me find that information for you, one moment.",
-                    ]
+                    options = [p.format(query=clean_q) for p in ToolEngagementPhrases.WEB_SEARCH_ENGLISH_QUERY]
                 else:
-                    options = [
-                        "Let me check the web for that, give me just a moment.",
-                        "Looking into that right now, one moment.",
-                        "Searching online for you, give me a second.",
-                    ]
+                    options = ToolEngagementPhrases.WEB_SEARCH_ENGLISH_DEFAULT
             return random.choice(options)
 
         elif name == "play_media":
             if is_hindi:
-                return f"YouTube par {query} dhoondh raha hoon, ek second." if query else "YouTube chala raha hoon, ek second."
-            return f"Looking up {query} on YouTube for you, one moment." if query else "Opening YouTube for you, one moment."
+                return ToolEngagementPhrases.PLAY_MEDIA_HINDI_QUERY.format(query=query) if query else ToolEngagementPhrases.PLAY_MEDIA_HINDI_DEFAULT
+            return ToolEngagementPhrases.PLAY_MEDIA_ENGLISH_QUERY.format(query=query) if query else ToolEngagementPhrases.PLAY_MEDIA_ENGLISH_DEFAULT
 
         elif name == "open_app":
             app = args.get("app_name", "app")
-            return f"{app} open kar raha hoon, ek second." if is_hindi else f"Opening {app} for you right away."
-
-        elif name == "get_time_date":
-            return "Samay check karta hoon, ek second." if is_hindi else "Checking the time for you, one moment."
+            return ToolEngagementPhrases.OPEN_APP_HINDI.format(app=app) if is_hindi else ToolEngagementPhrases.OPEN_APP_ENGLISH.format(app=app)
 
         elif name == "set_speaking_speed":
             # set_speaking_speed provides its own immediate spoken confirmation at the new speed
             return ""
 
-        return "Working on that for you, give me a moment."
+        return AssistantResponses.TOOL_DEFAULT_WORKING
 
     def _on_wake_detected(self, model_name: str, confidence: float) -> None:
         """Callback fired when wake word is detected."""
@@ -185,7 +170,7 @@ class HandsfreeAssistant:
                         ws_server.broadcast_state("idle")
                         self._reset_and_listen()
                         continue
-                    self.tts.speak("I could not hear anything.")
+                    self.tts.speak(AssistantResponses.NO_SPEECH_HEARD)
                     ws_server.broadcast_state("idle")
                     self._reset_and_listen()
                     continue
@@ -229,9 +214,6 @@ class HandsfreeAssistant:
                     ws_server.broadcast_state("speaking")
                     ws_server.broadcast_stream_chunk(cleaned, user_text)
 
-                    # If user is asking for clock time, let the executor provide exact ground truth
-                    if any(w in user_text.lower() for w in ("time", "samay", "baj", "waqt", "date", "tarikh")):
-                        return
                     if first_speech:
                         first_speech = False
                     speech_queue.put(cleaned)
@@ -277,7 +259,7 @@ class HandsfreeAssistant:
                 # Signal completion to frontend
                 ws_server.broadcast_response_complete(
                     user_text,
-                    clean_reply or "Action completed.",
+                    clean_reply or AssistantResponses.ACTION_COMPLETED,
                     needs_followup=llm_resp.needs_followup,
                 )
 

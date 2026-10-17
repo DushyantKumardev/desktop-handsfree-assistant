@@ -3,6 +3,7 @@
 import logging
 import subprocess
 import webbrowser
+from src.core.messages import ActionMessages, ErrorMessages
 from src.automation.models import ExecutionResult
 
 logger = logging.getLogger(__name__)
@@ -46,7 +47,7 @@ class AppHandler:
     def open_app(target: str) -> ExecutionResult:
         """Launches a desktop application on Windows."""
         if not target:
-            return ExecutionResult(success=False, action="open_app", message="No application name specified.")
+            return ExecutionResult(success=False, action="open_app", message=ErrorMessages.APP_NO_NAME)
 
         clean_target = target.lower().strip()
         cmd = APP_COMMANDS.get(clean_target, clean_target)
@@ -62,12 +63,12 @@ class AppHandler:
             return ExecutionResult(
                 success=True,
                 action="open_app",
-                message=f"Successfully launched {target}.",
+                message=ActionMessages.APP_LAUNCHED.format(target=target),
             )
         except Exception as e:
             logger.error("Failed to launch application '%s': %s", target, e)
             return ExecutionResult(
                 success=False,
                 action="open_app",
-                message=f"Failed to launch {target}: {e}",
+                message=ErrorMessages.APP_LAUNCH_FAILED.format(target=target, error=e),
             )
