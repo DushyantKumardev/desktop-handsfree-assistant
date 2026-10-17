@@ -29,6 +29,11 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# Downloaded Model Weights
+models/
+*.onnx
+*.onnx.json
+
 # Virtual Environments
 venv/
 .venv/

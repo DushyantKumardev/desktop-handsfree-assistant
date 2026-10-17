@@ -50,8 +50,8 @@ DEFAULT_VAD_MAX_RECORD_TIME = 10.0
 # ---------------------------------------------------------------------------
 # Speech-to-Text (STT) Constants (Faster-Whisper)
 # ---------------------------------------------------------------------------
-# Whisper model size: 'tiny.en' (~75MB) or 'base.en' (~145MB, recommended)
-DEFAULT_STT_MODEL_SIZE = "base.en"
+# Whisper model size: 'base' (multilingual, supports Hindi & English seamlessly)
+DEFAULT_STT_MODEL_SIZE = "base"
 
 # Hardware execution device: 'cpu' (or 'cuda' if Nvidia GPU is present)
 DEFAULT_STT_DEVICE = "cpu"
@@ -59,8 +59,17 @@ DEFAULT_STT_DEVICE = "cpu"
 # Quantization type: 'int8' gives blazing fast speed and low RAM usage on CPU
 DEFAULT_STT_COMPUTE_TYPE = "int8"
 
-# Spoken language
-DEFAULT_STT_LANGUAGE = "en"
+# Spoken language: 'auto' automatically detects Hindi vs English
+DEFAULT_STT_LANGUAGE = "auto"
+
+# ---------------------------------------------------------------------------
+# Text-to-Speech (TTS) Constants (Offline Neural Piper)
+# ---------------------------------------------------------------------------
+# Natural neural voice model name
+DEFAULT_TTS_VOICE = "en_US-lessac-medium"
+
+# Speaking speed multiplier (1.0 = normal, 1.15 = natural conversational pace)
+DEFAULT_TTS_SPEED = 1.15
 
 # ---------------------------------------------------------------------------
 # Application Constants

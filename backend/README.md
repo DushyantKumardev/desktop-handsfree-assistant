@@ -37,4 +37,7 @@ python tests/test_vad.py
 
 # Full end-to-end Voice Recognition (Mic -> Wake Word -> VAD -> Local STT)
 python tests/test_stt.py
+
+# Offline Neural Text-to-Speech test (Piper)
+python tests/test_tts.py
 ```

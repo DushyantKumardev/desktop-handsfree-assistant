@@ -21,6 +21,8 @@ from src.core.constants import (
     DEFAULT_STT_DEVICE,
     DEFAULT_STT_COMPUTE_TYPE,
     DEFAULT_STT_LANGUAGE,
+    DEFAULT_TTS_VOICE,
+    DEFAULT_TTS_SPEED,
 )
 
 # Automatically load environment variables from project-level .env if present
@@ -71,6 +73,12 @@ class STTConfig:
     language: str = os.getenv("STT_LANGUAGE", DEFAULT_STT_LANGUAGE)
 
 @dataclass(frozen=True)
+class TTSConfig:
+    """Local Text-to-Speech configuration using offline Piper neural voice."""
+    voice: str = os.getenv("TTS_VOICE", DEFAULT_TTS_VOICE)
+    speed: float = float(os.getenv("TTS_SPEED", str(DEFAULT_TTS_SPEED)))
+
+@dataclass(frozen=True)
 class AppConfig:
     """Global backend application settings."""
     app_env: str = os.getenv("APP_ENV", DEFAULT_APP_ENV)
@@ -79,6 +87,7 @@ class AppConfig:
     wakeword: WakeWordConfig = field(default_factory=WakeWordConfig)
     vad: VADConfig = field(default_factory=VADConfig)
     stt: STTConfig = field(default_factory=STTConfig)
+    tts: TTSConfig = field(default_factory=TTSConfig)
 
 # Default global configuration instance
 config = AppConfig()

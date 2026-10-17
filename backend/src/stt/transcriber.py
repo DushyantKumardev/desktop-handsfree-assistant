@@ -39,12 +39,23 @@ class STTTranscriber:
         # Normalize 16-bit PCM integer samples [-32768, 32767] to float32 [-1.0, 1.0]
         audio_float = audio_data.astype(np.float32) / 32768.0
 
+        # Auto-detect language if set to 'auto'
+        lang = None if self.config.language.lower() in ("auto", "none", "") else self.config.language
+
+        # Context prompt primes Whisper for accurate Hindi/English voice commands
+        prompt = "User speaking conversational Hindi and English commands: gaana chalao, open chrome, weather batao."
+
         segments, info = self.model.transcribe(
             audio_float,
-            beam_size=1,
-            language=self.config.language,
+            beam_size=5,
+            best_of=5,
+            initial_prompt=prompt,
+            language=lang,
             vad_filter=False,  # AudioRecorder has already handled voice activity detection
         )
+
+        self.last_detected_language = info.language
+        logger.info("Transcribed audio (Detected language: %s, Probability: %.2f)", info.language, info.language_probability)
 
         full_text = " ".join(segment.text.strip() for segment in segments)
         return full_text.strip()
