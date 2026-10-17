@@ -23,10 +23,16 @@ from src.core.constants import (
     DEFAULT_STT_LANGUAGE,
     DEFAULT_TTS_VOICE,
     DEFAULT_TTS_SPEED,
+    DEFAULT_LLM_BASE_URL,
+    DEFAULT_LLM_MODEL,
+    DEFAULT_LLM_API_KEY,
+    DEFAULT_LLM_TEMPERATURE,
 )
 
-# Automatically load environment variables from project-level .env if present
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+# Automatically load environment variables: backend/.env first, then root .env
+_BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
+_PROJECT_ROOT = _BACKEND_ROOT.parent
+load_dotenv(_BACKEND_ROOT / ".env")
 load_dotenv(_PROJECT_ROOT / ".env")
 
 # Silence benign Windows symlink warning from huggingface_hub
@@ -79,6 +85,14 @@ class TTSConfig:
     speed: float = float(os.getenv("TTS_SPEED", str(DEFAULT_TTS_SPEED)))
 
 @dataclass(frozen=True)
+class LLMConfig:
+    """Provider-agnostic LLM configuration using standard OpenAI SDK."""
+    base_url: str = os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL)
+    model: str = os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL)
+    api_key: str = os.getenv("LLM_API_KEY", DEFAULT_LLM_API_KEY)
+    temperature: float = float(os.getenv("LLM_TEMPERATURE", str(DEFAULT_LLM_TEMPERATURE)))
+
+@dataclass(frozen=True)
 class AppConfig:
     """Global backend application settings."""
     app_env: str = os.getenv("APP_ENV", DEFAULT_APP_ENV)
@@ -88,6 +102,7 @@ class AppConfig:
     vad: VADConfig = field(default_factory=VADConfig)
     stt: STTConfig = field(default_factory=STTConfig)
     tts: TTSConfig = field(default_factory=TTSConfig)
+    llm: LLMConfig = field(default_factory=LLMConfig)
 
 # Default global configuration instance
 config = AppConfig()

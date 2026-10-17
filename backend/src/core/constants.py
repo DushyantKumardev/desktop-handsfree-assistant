@@ -72,6 +72,21 @@ DEFAULT_TTS_VOICE = "en_US-lessac-medium"
 DEFAULT_TTS_SPEED = 1.15
 
 # ---------------------------------------------------------------------------
+# LLM & Intent Engine Constants (OpenAI SDK Compatible)
+# ---------------------------------------------------------------------------
+# Base URL for any OpenAI-compatible provider (e.g. Ollama, OpenRouter, LM Studio)
+DEFAULT_LLM_BASE_URL = "http://localhost:11434/v1"
+
+# Target LLM model name
+DEFAULT_LLM_MODEL = "llama3.2"
+
+# API key placeholder (not needed for local Ollama)
+DEFAULT_LLM_API_KEY = "ollama"
+
+# Sampling temperature (low temperature = deterministic intent extraction)
+DEFAULT_LLM_TEMPERATURE = 0.2
+
+# ---------------------------------------------------------------------------
 # Application Constants
 # ---------------------------------------------------------------------------
 DEFAULT_APP_ENV = "development"
