@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from typing import Any, Callable, Optional
 from openai import OpenAI
 from src.core.config import LLMConfig, config
@@ -9,25 +10,24 @@ from src.tools import DESKTOP_TOOLS, ToolCall, LLMResponse
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are the intelligent voice assistant brain of a desktop computer.
-You have access to native tools to control the operating system.
+SYSTEM_PROMPT = """You are the voice brain of a desktop computer. You control the OS with tools.
 
-RULES FOR USING TOOLS:
-1. Always call the appropriate tool when the user asks you to perform an action:
-   - "open youtube", "open chrome", "open notepad" -> Call open_app(app_name=...)
-   - "open youtube and search/play X", "play X" -> Call play_media(query="X")
-   - "search for X", "open chrome and search for X", "look up X" -> Call web_search(query="X")
-   - "what time is it", "today's date" -> Call get_time_date()
-   - "set volume to 40%", "mute", "pause music", "next song" -> Call set_volume / mute_volume / media_control
-2. ALWAYS speak a short, friendly connecting sentence (1 brief sentence) to the user when executing any tool.
-   Examples:
-   - "Opening YouTube for you."
-   - "Searching for Tesla new car."
-   - "Playing Diljit Dosanjh on YouTube."
-   - "Setting master volume to 40 percent."
-   - "Checking the time."
-3. ONLY if the user is saying hello, greeting, or having small talk (e.g. "who are you?", "hello"), respond directly without calling any tools.
-4. Support English, Hindi, and Hinglish naturally.
+Always speak a short natural sentence FIRST before any tool call. Never stay silent.
+Examples: "Ahh got it, one sec.", "Looking that up for you.", "Opening that now.", "Checking the time."
+
+Then call the right tool:
+- search / who is / what is / latest news → web_search
+- play / open youtube and play → play_media
+- open chrome / notepad / youtube → open_app
+- time / date → get_time_date
+- volume / mute / pause / next → set_volume / mute_volume / media_control
+- speak faster / slower / speed up / slow down / normal speed → set_speaking_speed
+
+Pure chat or greetings → just reply naturally in 1-3 sentences. No tools.
+
+Everything you say goes straight to TTS. Speak only clean plain sentences. No markdown, no asterisks, no bullets, no emojis, no symbols.
+
+Support English, Hindi and Hinglish naturally.
 """
 
 
@@ -50,16 +50,20 @@ class LLMBrain:
     def process_command(
         self,
         user_query: str,
+        on_sentence_ready: Optional[Callable[[str], None]] = None,
         on_reply_ready: Optional[Callable[[str], None]] = None,
         on_token: Optional[Callable[[str], None]] = None,
     ) -> LLMResponse:
         """
         Processes user query with the LLM.
-        - Streams the spoken sentence and emits on_reply_ready for TTS.
+        - Streams spoken sentences dynamically via on_sentence_ready as they complete.
         - Collects any requested ToolCalls and returns LLMResponse(spoken_reply, tool_calls).
         """
         if not user_query.strip():
             return LLMResponse(spoken_reply="I did not catch that.", tool_calls=[], raw_query="")
+
+        # Ensure max_tokens has at least 450 tokens to prevent cutting off multi-sentence answers
+        effective_max_tokens = max(self.config.max_tokens, 450)
 
         request_kwargs: dict[str, Any] = {
             "model": self.config.model,
@@ -70,7 +74,7 @@ class LLMBrain:
             "tools": DESKTOP_TOOLS,
             "tool_choice": "auto",
             "temperature": self.config.temperature,
-            "max_tokens": self.config.max_tokens,
+            "max_tokens": effective_max_tokens,
             "stream": True,
         }
 
@@ -88,8 +92,9 @@ class LLMBrain:
             stream = self.client.chat.completions.create(**request_kwargs)
 
             content_tokens: list[str] = []
+            sentence_buffer: list[str] = []
             tool_calls_dict: dict[int, dict[str, Any]] = {}
-            reply_emitted = False
+            first_sentence_emitted = False
 
             for chunk in stream:
                 if not chunk.choices:
@@ -99,15 +104,27 @@ class LLMBrain:
                 # 1. Stream spoken text
                 if delta.content:
                     content_tokens.append(delta.content)
+                    sentence_buffer.append(delta.content)
                     if callable(on_token):
                         on_token(delta.content)
 
-                    # Trigger early TTS on first sentence boundary
-                    if not reply_emitted and any(punct in delta.content for punct in (".", "!", "?", "\n")):
-                        reply_emitted = True
-                        early_text = "".join(content_tokens).strip()
-                        if callable(on_reply_ready) and early_text:
-                            on_reply_ready(early_text)
+                    # Check for sentence boundary (period, exclamation, question mark followed by space or newline)
+                    buf_text = "".join(sentence_buffer)
+                    if any(p in delta.content for p in (".", "!", "?", "\n")):
+                        while True:
+                            match = re.search(r"^([\s\S]*?[.!?\n])(\s+[\s\S]*|$)", buf_text)
+                            if match and match.group(1).strip():
+                                sentence = match.group(1).strip()
+                                buf_text = match.group(2).lstrip()
+                                if callable(on_sentence_ready):
+                                    on_sentence_ready(sentence)
+                                if not first_sentence_emitted:
+                                    first_sentence_emitted = True
+                                    if callable(on_reply_ready):
+                                        on_reply_ready(sentence)
+                            else:
+                                break
+                        sentence_buffer = [buf_text] if buf_text else []
 
                 # 2. Accumulate tool calls
                 if delta.tool_calls:
@@ -124,6 +141,16 @@ class LLMBrain:
                                     tool_calls_dict[idx]["name"] += tc.function.name
                                 if tc.function.arguments:
                                     tool_calls_dict[idx]["arguments"] += tc.function.arguments
+
+            # Flush any remaining un-yielded sentence from buffer
+            remaining_sentence = "".join(sentence_buffer).strip()
+            if remaining_sentence:
+                if callable(on_sentence_ready):
+                    on_sentence_ready(remaining_sentence)
+                if not first_sentence_emitted:
+                    first_sentence_emitted = True
+                    if callable(on_reply_ready):
+                        on_reply_ready(remaining_sentence)
 
             full_speech = "".join(content_tokens).strip()
 
@@ -143,10 +170,11 @@ class LLMBrain:
             if collected_tools and not full_speech:
                 first_tool = collected_tools[0]
                 full_speech = self._generate_default_phrase(first_tool.name, first_tool.args)
-
-            # Emit reply for TTS if not already emitted
-            if not reply_emitted and callable(on_reply_ready) and full_speech:
-                on_reply_ready(full_speech)
+                if full_speech:
+                    if callable(on_sentence_ready):
+                        on_sentence_ready(full_speech)
+                    if not first_sentence_emitted and callable(on_reply_ready):
+                        on_reply_ready(full_speech)
 
             return LLMResponse(
                 spoken_reply=full_speech or "Hello! How can I assist you?",
@@ -171,7 +199,8 @@ class LLMBrain:
         if tool_name == "open_app":
             return f"Opening {args.get('app_name', 'application')}."
         elif tool_name == "play_media":
-            return f"Playing {args.get('query', '')} on YouTube."
+            q = args.get("query", "")
+            return f"Playing {q} on YouTube." if q else "Opening YouTube."
         elif tool_name == "media_control":
             return "Skipping track." if args.get("command") == "next_track" else "Toggling playback."
         elif tool_name == "set_volume":
@@ -185,5 +214,9 @@ class LLMBrain:
         elif tool_name == "lock_computer":
             return "Locking your computer."
         elif tool_name == "web_search":
-            return f"Searching for {args.get('query', '')}."
-        return "Executing command."
+            q = args.get("query", "")
+            return f"Searching for {q}." if q else "Searching the web."
+        elif tool_name == "set_speaking_speed":
+            # Let the tool's spoken override speak at the new speed directly
+            return ""
+        return "Right away."

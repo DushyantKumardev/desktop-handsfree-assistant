@@ -1,49 +1,203 @@
-"""Web search handler for Google and YouTube."""
+"""Web search handler supporting Serper (Google Search API), headless retrieval, and spoken summaries."""
 
+import json
 import logging
 import re
 import urllib.parse
+import urllib.request
 import webbrowser
+from typing import Optional
+from src.core.config import config
 from src.automation.models import ExecutionResult
 
 logger = logging.getLogger(__name__)
 
 
 class WebHandler:
-    """Handles web search queries, YouTube routing, and filler word stripping."""
+    """Handles web search queries: Serper Google API, headless fallback, and YouTube routing."""
+
+    @classmethod
+    def headless_search(cls, query: str) -> ExecutionResult:
+        """
+        Headlessly searches the web for answers/news without opening a browser window.
+        Uses Serper (Google Search API) if configured, with DuckDuckGo and Wikipedia fallback.
+        Returns the concise spoken summary in `spoken_override` for instant TTS playback.
+        """
+        clean_q = query.strip()
+        logger.info("Executing headless web search for: '%s'", clean_q)
+
+        summary: Optional[str] = None
+
+        # 1. Primary: Serper (Google Search API) if API key is present
+        serper_key = config.search.serper_api_key
+        if serper_key and serper_key.strip():
+            summary = cls._search_via_serper(clean_q, serper_key.strip())
+
+        # 2. Fallback: DuckDuckGo Search library (DDGS)
+        if not summary:
+            summary = cls._search_via_ddgs(clean_q)
+
+        # 3. Fallback: DuckDuckGo Instant Answer API
+        if not summary:
+            summary = cls._search_via_ddg_api(clean_q)
+
+        # 4. Fallback: Wikipedia Summary API
+        if not summary:
+            summary = cls._search_via_wikipedia(clean_q)
+
+        if summary:
+            return ExecutionResult(
+                success=True,
+                action="web_search",
+                message=f"Retrieved web search results for '{clean_q}'.",
+                spoken_override=summary,
+            )
+
+        # 5. If all headless APIs fail, open browser as fallback
+        return cls.open_browser_search(clean_q)
+
+    @classmethod
+    def _search_via_serper(cls, query: str, api_key: str) -> Optional[str]:
+        """
+        Query Google Serper API (https://google.serper.dev/search).
+        Extracts Google answerBox, knowledgeGraph, or top organic search snippets.
+        """
+        try:
+            url = "https://google.serper.dev/search"
+            payload = json.dumps({"q": query, "num": 3}).encode("utf-8")
+            headers = {
+                "X-API-KEY": api_key,
+                "Content-Type": "application/json",
+            }
+            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=4.0) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+
+            # 1. Check Google answerBox (instant direct answers like weather, calculations, stock, facts)
+            answer_box = data.get("answerBox")
+            if answer_box:
+                answer = answer_box.get("answer") or answer_box.get("snippet") or answer_box.get("title")
+                if answer:
+                    logger.info("Serper matched Google answerBox.")
+                    return cls._clean_spoken_summary(str(answer))
+
+            # 2. Check Google knowledgeGraph (people, companies, places, definitions)
+            kg = data.get("knowledgeGraph")
+            if kg:
+                desc = kg.get("description") or kg.get("snippet")
+                if desc:
+                    title = kg.get("title", "")
+                    text = f"{title}: {desc}" if title and not desc.startswith(title) else desc
+                    logger.info("Serper matched Google knowledgeGraph.")
+                    return cls._clean_spoken_summary(text)
+
+            # 3. Check Google organic search snippets
+            organic = data.get("organic", [])
+            snippets = []
+            for item in organic[:2]:
+                snippet = item.get("snippet", "").strip()
+                if snippet:
+                    snippets.append(snippet)
+
+            if snippets:
+                logger.info("Serper matched %d organic snippets.", len(snippets))
+                combined = " ".join(snippets)
+                return cls._clean_spoken_summary(combined)
+
+        except Exception as e:
+            logger.warning("Serper Google search failed: %s. Using local fallback.", e)
+        return None
+
+    @classmethod
+    def _search_via_ddgs(cls, query: str) -> Optional[str]:
+        """Search using duckduckgo_search library."""
+        try:
+            from duckduckgo_search import DDGS
+            with DDGS() as ddgs:
+                results = list(ddgs.text(query, max_results=3))
+                if results:
+                    snippets = [r.get("body", "").strip() for r in results if r.get("body")]
+                    if snippets:
+                        combined = " ".join(snippets[:2])
+                        return cls._clean_spoken_summary(combined)
+        except Exception as e:
+            logger.debug("DDGS search failed: %s", e)
+        return None
+
+    @classmethod
+    def _search_via_ddg_api(cls, query: str) -> Optional[str]:
+        """Search using DuckDuckGo Instant Answer JSON API."""
+        try:
+            encoded = urllib.parse.quote_plus(query)
+            url = f"https://api.duckduckgo.com/?q={encoded}&format=json&no_html=1&skip_disambig=1"
+            req = urllib.request.Request(url, headers={"User-Agent": "DesktopHandsfreeAssistant/1.0"})
+            with urllib.request.urlopen(req, timeout=3.5) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+
+            abstract = data.get("AbstractText", "").strip()
+            if abstract:
+                return cls._clean_spoken_summary(abstract)
+
+            answer = data.get("Answer", "").strip()
+            if answer:
+                return cls._clean_spoken_summary(answer)
+
+            related = data.get("RelatedTopics", [])
+            for item in related:
+                text = item.get("Text", "").strip()
+                if text:
+                    return cls._clean_spoken_summary(text)
+        except Exception as e:
+            logger.debug("DuckDuckGo API fallback failed: %s", e)
+        return None
+
+    @classmethod
+    def _search_via_wikipedia(cls, query: str) -> Optional[str]:
+        """Retrieve top summary snippet from Wikipedia REST API."""
+        try:
+            clean_topic = re.sub(r"^(?:who is|what is|tell me about|define|latest news on)\s+", "", query, flags=re.IGNORECASE).strip()
+            encoded = urllib.parse.quote(clean_topic)
+            url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{encoded}"
+            req = urllib.request.Request(url, headers={"User-Agent": "DesktopHandsfreeAssistant/1.0"})
+            with urllib.request.urlopen(req, timeout=3.0) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            extract = data.get("extract", "").strip()
+            if extract:
+                return cls._clean_spoken_summary(extract)
+        except Exception as e:
+            logger.debug("Wikipedia fallback failed: %s", e)
+        return None
 
     @staticmethod
-    def search(query: str, raw_query: str = "") -> ExecutionResult:
-        """Opens a web search query in Google or YouTube in the default browser."""
-        target_text = (query or "").strip()
-        full_text = (raw_query or "").strip()
+    def _clean_spoken_summary(text: str, max_sentences: int = 2) -> str:
+        """Cleans and shortens web snippet for natural, snappy TTS speech."""
+        cleaned = re.sub(r"https?://\S+", "", text)
+        cleaned = re.sub(r"\[\d+\]", "", cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
 
-        combined = f"{target_text} {full_text}".lower()
-        is_youtube = any(k in combined for k in ("youtube", "video", "music", "song", "gaana", "play"))
+        # Split into sentences and take top 2
+        sentences = re.split(r"(?<=[.!?])\s+", cleaned)
+        selected = sentences[:max_sentences]
+        result = " ".join(selected).strip()
 
-        if is_youtube:
-            clean_q = target_text or full_text
-            for filler in (
-                "alexa", "open youtube and search for", "search youtube about",
-                "search youtube for", "search youtube", "open youtube",
-                "play on youtube", "on youtube", "search for", "search",
-                "play", "youtube", "about"
-            ):
-                clean_q = re.sub(re.escape(filler), "", clean_q, flags=re.IGNORECASE).strip()
+        if len(result) > 280:
+            result = result[:277] + "..."
+        return result
 
-            clean_q = clean_q.strip()
-            if not clean_q:
-                url = "https://www.youtube.com"
-                msg = "Opened YouTube in browser."
-            else:
-                encoded = urllib.parse.quote_plus(clean_q)
-                url = f"https://www.youtube.com/results?search_query={encoded}"
-                msg = f"Opened YouTube search for '{clean_q}'."
+    @classmethod
+    def open_youtube_playback(cls, query: str) -> ExecutionResult:
+        """Opens YouTube search/playback in the default web browser."""
+        clean_q = query.strip()
+        for filler in ("play on youtube", "on youtube", "play", "youtube", "about"):
+            clean_q = re.sub(re.escape(filler), "", clean_q, flags=re.IGNORECASE).strip()
+
+        if not clean_q:
+            url = "https://www.youtube.com"
+            msg = "Opened YouTube in browser."
         else:
-            search_query = target_text or full_text
-            encoded = urllib.parse.quote_plus(search_query)
-            url = f"https://www.google.com/search?q={encoded}"
-            msg = f"Opened Google search for '{search_query}'."
+            encoded = urllib.parse.quote_plus(clean_q)
+            url = f"https://www.youtube.com/results?search_query={encoded}"
+            msg = f"Opened YouTube search for '{clean_q}'."
 
         try:
             webbrowser.open(url)
@@ -53,9 +207,37 @@ class WebHandler:
                 message=msg,
             )
         except Exception as e:
-            logger.error("Failed to open web search: %s", e)
+            logger.error("Failed to open YouTube: %s", e)
             return ExecutionResult(
                 success=False,
                 action="web_search",
                 message=f"Could not open browser: {e}",
             )
+
+    @classmethod
+    def open_browser_search(cls, query: str) -> ExecutionResult:
+        """Fallback: opens Google search in default web browser."""
+        encoded = urllib.parse.quote_plus(query)
+        url = f"https://www.google.com/search?q={encoded}"
+        try:
+            webbrowser.open(url)
+            return ExecutionResult(
+                success=True,
+                action="web_search",
+                message=f"Opened Google search for '{query}'.",
+            )
+        except Exception as e:
+            logger.error("Failed to open browser: %s", e)
+            return ExecutionResult(
+                success=False,
+                action="web_search",
+                message=f"Could not open browser: {e}",
+            )
+
+    @classmethod
+    def search(cls, query: str, raw_query: str = "") -> ExecutionResult:
+        """Unified search router."""
+        combined = f"{query} {raw_query}".lower()
+        if any(w in combined for w in ("youtube", "video", "song", "gaana", "play ")):
+            return cls.open_youtube_playback(query)
+        return cls.headless_search(query)

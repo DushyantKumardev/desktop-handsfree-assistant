@@ -86,8 +86,8 @@ DEFAULT_LLM_API_KEY = "ollama"
 # Sampling temperature (low temperature = deterministic intent extraction)
 DEFAULT_LLM_TEMPERATURE = 0.2
 
-# Maximum output tokens (keeps response short, snappy, and fast)
-DEFAULT_LLM_MAX_TOKENS = 150
+# Maximum output tokens (keeps response snappy without cutting off multi-sentence answers)
+DEFAULT_LLM_MAX_TOKENS = 280
 
 # Reasoning effort for reasoning models ('low', 'none', 'off' to disable thinking delay)
 DEFAULT_LLM_REASONING_EFFORT = "low"

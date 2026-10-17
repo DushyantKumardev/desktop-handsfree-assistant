@@ -106,6 +106,12 @@ class SoundConfig:
     stop_file: str = os.getenv("SOUND_STOP_FILE", DEFAULT_SOUND_STOP_FILE)
 
 @dataclass(frozen=True)
+class SearchConfig:
+    """Web search configuration for headless real-time search."""
+    serper_api_key: Optional[str] = os.getenv("SERPER_API_KEY")
+
+
+@dataclass(frozen=True)
 class AppConfig:
     """Global backend application settings."""
     app_env: str = os.getenv("APP_ENV", DEFAULT_APP_ENV)
@@ -117,6 +123,7 @@ class AppConfig:
     tts: TTSConfig = field(default_factory=TTSConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
     sound: SoundConfig = field(default_factory=SoundConfig)
+    search: SearchConfig = field(default_factory=SearchConfig)
 
 # Default global configuration instance
 config = AppConfig()

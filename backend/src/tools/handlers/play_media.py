@@ -24,5 +24,5 @@ DEFINITION: dict[str, Any] = {
 
 
 def execute(query: str) -> ExecutionResult:
-    """Search and launch playback on YouTube."""
-    return WebHandler.search(f"play {query}")
+    """Search and launch playback on YouTube in browser."""
+    return WebHandler.open_youtube_playback(query)

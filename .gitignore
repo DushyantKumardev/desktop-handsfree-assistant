@@ -81,4 +81,5 @@ logs/
 tmp/
 temp/
 *.wav
+backend/data/
 

@@ -1,4 +1,4 @@
-"""Tool for searching the web via Google."""
+"""Tool for headless web search with direct spoken answers."""
 
 from typing import Any
 from src.automation.handlers.web_handler import WebHandler
@@ -8,13 +8,13 @@ DEFINITION: dict[str, Any] = {
     "type": "function",
     "function": {
         "name": "web_search",
-        "description": "Search the web on Google for questions, facts, news, websites, or products. Call this when user says 'search for X', 'open chrome and search for X', 'look up X', or 'google X'.",
+        "description": "Headlessly search the web for facts, latest news, weather, definitions, or questions. Returns a concise spoken answer without opening a browser window.",
         "parameters": {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "The search query to look up on Google",
+                    "description": "The search query, question, or topic to search on the web",
                 }
             },
             "required": ["query"],
@@ -24,5 +24,5 @@ DEFINITION: dict[str, Any] = {
 
 
 def execute(query: str) -> ExecutionResult:
-    """Perform Google search."""
-    return WebHandler.search(query)
+    """Perform headless web search and return spoken summary in spoken_override."""
+    return WebHandler.headless_search(query)

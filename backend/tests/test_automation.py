@@ -24,17 +24,16 @@ def test_get_time():
     assert "time is" in res.spoken_override.lower()
 
 
-@patch("webbrowser.open")
-def test_web_search_google(mock_browser):
+@patch("src.automation.handlers.web_handler.WebHandler._search_via_serper", return_value="Quantum computing uses qubits to calculate exponentially faster.")
+def test_web_search_headless(mock_serper):
     executor = ActionExecutor()
     call = ToolCall(name="web_search", args={"query": "quantum computing"})
     res = executor.execute_tool(call)
 
     assert res.success is True
     assert res.action == "web_search"
-    mock_browser.assert_called_once()
-    called_url = mock_browser.call_args[0][0]
-    assert "google.com/search?q=quantum" in called_url
+    assert res.spoken_override is not None
+    assert "qubits" in res.spoken_override
 
 
 @patch("webbrowser.open")
@@ -135,7 +134,7 @@ def test_batch_tool_execution():
 if __name__ == "__main__":
     print("[*] Running desktop action tool tests...")
     test_get_time()
-    test_web_search_google()
+    test_web_search_headless()
     test_play_media_youtube()
     test_open_app_chrome()
     test_volume_adjust()

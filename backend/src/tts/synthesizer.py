@@ -2,6 +2,7 @@
 
 import io
 import logging
+import re
 import urllib.request
 import wave
 from pathlib import Path
@@ -11,6 +12,7 @@ import sounddevice as sd
 from piper.voice import PiperVoice
 from piper.config import SynthesisConfig
 from src.core.config import TTSConfig, config
+from src.core.storage import SettingsStorage
 
 logger = logging.getLogger(__name__)
 
@@ -32,14 +34,54 @@ class TTSSynthesizer:
         },
     }
 
+    _INSTANCE: Optional["TTSSynthesizer"] = None
+
     def __init__(self, tts_config: Optional[TTSConfig] = None) -> None:
         self.config = tts_config or config.tts
+        # Restore speed from persistent storage cache, falling back to config default
+        self.speed = SettingsStorage.get_speaking_speed(default=float(self.config.speed))
         self.models_dir = Path(__file__).resolve().parent.parent.parent / "models" / "piper"
         self.models_dir.mkdir(parents=True, exist_ok=True)
         self._loaded_voices: dict[str, PiperVoice] = {}
+        TTSSynthesizer._INSTANCE = self
 
         # Pre-load default voice
         self._get_voice(self.config.voice)
+
+    @classmethod
+    def get_instance(cls) -> Optional["TTSSynthesizer"]:
+        """Returns the active TTS synthesizer instance."""
+        return cls._INSTANCE
+
+    def set_speed(self, speed: float) -> float:
+        """Sets speaking speed multiplier (0.5 to 2.5) and persists to storage cache."""
+        self.speed = max(0.5, min(2.5, round(float(speed), 2)))
+        SettingsStorage.set_speaking_speed(self.speed)
+        logger.info("TTS speaking speed updated and saved to storage: %.2fx", self.speed)
+        return self.speed
+
+    def adjust_speed(self, delta: float) -> float:
+        """Adjusts current speaking speed by delta (e.g. +0.2 or -0.2) and persists to storage."""
+        return self.set_speed(self.speed + delta)
+
+    @staticmethod
+    def clean_spoken_text(text: str) -> str:
+        """Strips markdown asterisks, hashtags, and formatting characters before speaking."""
+        if not text:
+            return ""
+        # Remove markdown bold/italic asterisks & underscores (**bold** -> bold)
+        cleaned = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+        cleaned = re.sub(r"\*([^*]+)\*", r"\1", cleaned)
+        cleaned = re.sub(r"__([^_]+)__", r"\1", cleaned)
+        cleaned = re.sub(r"_([^_]+)_", r"\1", cleaned)
+        cleaned = re.sub(r"#{1,6}\s*", "", cleaned)  # Headers
+        cleaned = re.sub(r"`[^`]*`", "", cleaned)     # Code blocks
+        cleaned = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", cleaned)  # Links
+        cleaned = re.sub(r"[\*#~`>]", "", cleaned)
+        # Normalize non-breaking and narrow unicode spaces (e.g. \u202f, \u00a0)
+        cleaned = re.sub(r"[\u00a0\u202f\u200b]", " ", cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned)
+        return cleaned.strip()
 
     @staticmethod
     def detect_language(text: str) -> str:
@@ -79,24 +121,25 @@ class TTSSynthesizer:
         """
         Synthesize text into a 16-bit PCM numpy audio array with automatic voice routing.
         """
-        if not text.strip():
+        clean_text = self.clean_spoken_text(text)
+        if not clean_text:
             return np.array([], dtype=np.int16), 22050
 
         # Auto-detect language if voice not explicitly provided
         if not voice_name:
-            lang = self.detect_language(text)
+            lang = self.detect_language(clean_text)
             voice_name = "hi_IN-priyamvada-medium" if lang == "hi" else self.config.voice
 
         voice = self._get_voice(voice_name)
 
         # length_scale inversely controls speaking pace (e.g. 1.15 speed = ~0.87 scale)
-        speed = max(0.5, min(2.5, self.config.speed))
+        speed = max(0.5, min(2.5, self.speed))
         syn_config = SynthesisConfig(length_scale=1.0 / speed)
 
         # Piper yields AudioChunk objects with audio_int16_array
         audio_chunks = [
             chunk.audio_int16_array
-            for chunk in voice.synthesize(text.strip(), syn_config=syn_config)
+            for chunk in voice.synthesize(clean_text, syn_config=syn_config)
         ]
         if not audio_chunks:
             return np.array([], dtype=np.int16), 22050
@@ -115,19 +158,20 @@ class TTSSynthesizer:
         Yield (chunk_pcm_array, sample_rate) dynamically as Piper synthesizes audio.
         Allows instant playback before the full sentence is synthesized.
         """
-        if not text.strip():
+        clean_text = self.clean_spoken_text(text)
+        if not clean_text:
             return
 
         if not voice_name:
-            lang = self.detect_language(text)
+            lang = self.detect_language(clean_text)
             voice_name = "hi_IN-priyamvada-medium" if lang == "hi" else self.config.voice
 
         voice = self._get_voice(voice_name)
-        speed = max(0.5, min(2.5, self.config.speed))
+        speed = max(0.5, min(2.5, self.speed))
         syn_config = SynthesisConfig(length_scale=1.0 / speed)
         sample_rate = voice.config.sample_rate
 
-        for chunk in voice.synthesize(text.strip(), syn_config=syn_config):
+        for chunk in voice.synthesize(clean_text, syn_config=syn_config):
             if chunk.audio_int16_array is not None and len(chunk.audio_int16_array) > 0:
                 yield chunk.audio_int16_array, sample_rate
 
@@ -136,22 +180,23 @@ class TTSSynthesizer:
         Synthesize and play audio in real time via sounddevice.OutputStream.
         Playback starts on the very first audio chunk (~50-100ms).
         """
-        if not text.strip():
+        clean_text = self.clean_spoken_text(text)
+        if not clean_text:
             return
 
         if not voice_name:
-            lang = self.detect_language(text)
+            lang = self.detect_language(clean_text)
             voice_name = "hi_IN-priyamvada-medium" if lang == "hi" else self.config.voice
 
         voice = self._get_voice(voice_name)
         sample_rate = voice.config.sample_rate
 
-        speed = max(0.5, min(2.5, self.config.speed))
+        speed = max(0.5, min(2.5, self.speed))
         syn_config = SynthesisConfig(length_scale=1.0 / speed)
 
         # Open low-latency output stream
         with sd.OutputStream(samplerate=sample_rate, channels=1, dtype="int16") as stream:
-            for chunk in voice.synthesize(text.strip(), syn_config=syn_config):
+            for chunk in voice.synthesize(clean_text, syn_config=syn_config):
                 if chunk.audio_int16_array is not None and len(chunk.audio_int16_array) > 0:
                     stream.write(chunk.audio_int16_array)
 
