@@ -3,7 +3,7 @@
 import logging
 import wave
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 import numpy as np
 import sounddevice as sd
 from src.core.config import SoundConfig, config
@@ -18,9 +18,13 @@ class SoundFeedback:
 
     def __init__(
         self,
-        sounds_dir: Optional[Path] = None,
+        sounds_dir: Optional[Union[Path, SoundConfig]] = None,
         sound_config: Optional[SoundConfig] = None,
     ) -> None:
+        if isinstance(sounds_dir, SoundConfig):
+            sound_config = sounds_dir
+            sounds_dir = None
+
         self.sounds_dir = sounds_dir or ASSETS_DIR
         self.sounds_dir.mkdir(parents=True, exist_ok=True)
         self.config = sound_config or config.sound

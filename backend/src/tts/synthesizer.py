@@ -110,11 +110,68 @@ class TTSSynthesizer:
 
         return audio_array, sample_rate
 
-    def speak(self, text: str, voice_name: Optional[str] = None) -> None:
-        """Synthesize text and play through sounddevice immediately."""
+    def synthesize_stream(self, text: str, voice_name: Optional[str] = None):
+        """
+        Yield (chunk_pcm_array, sample_rate) dynamically as Piper synthesizes audio.
+        Allows instant playback before the full sentence is synthesized.
+        """
+        if not text.strip():
+            return
+
+        if not voice_name:
+            lang = self.detect_language(text)
+            voice_name = "hi_IN-priyamvada-medium" if lang == "hi" else self.config.voice
+
+        voice = self._get_voice(voice_name)
+        speed = max(0.5, min(2.5, self.config.speed))
+        syn_config = SynthesisConfig(length_scale=1.0 / speed)
+        sample_rate = voice.config.sample_rate
+
+        for chunk in voice.synthesize(text.strip(), syn_config=syn_config):
+            if chunk.audio_int16_array is not None and len(chunk.audio_int16_array) > 0:
+                yield chunk.audio_int16_array, sample_rate
+
+    def stream_speak(self, text: str, voice_name: Optional[str] = None) -> None:
+        """
+        Synthesize and play audio in real time via sounddevice.OutputStream.
+        Playback starts on the very first audio chunk (~50-100ms).
+        """
+        if not text.strip():
+            return
+
+        if not voice_name:
+            lang = self.detect_language(text)
+            voice_name = "hi_IN-priyamvada-medium" if lang == "hi" else self.config.voice
+
+        voice = self._get_voice(voice_name)
+        sample_rate = voice.config.sample_rate
+
+        speed = max(0.5, min(2.5, self.config.speed))
+        syn_config = SynthesisConfig(length_scale=1.0 / speed)
+
+        # Open low-latency output stream
+        with sd.OutputStream(samplerate=sample_rate, channels=1, dtype="int16") as stream:
+            for chunk in voice.synthesize(text.strip(), syn_config=syn_config):
+                if chunk.audio_int16_array is not None and len(chunk.audio_int16_array) > 0:
+                    stream.write(chunk.audio_int16_array)
+
+            # Trailing silence padding so Windows audio driver doesn't clip the final phoneme
+            trailing_padding = np.zeros(int(sample_rate * 0.3), dtype=np.int16)
+            stream.write(trailing_padding)
+
+    def speak(self, text: str, voice_name: Optional[str] = None, stream: bool = True) -> None:
+        """
+        Synthesize text and play through sounddevice.
+        If stream=True (default), streams chunks directly to the soundcard for minimum latency.
+        """
+        if stream:
+            self.stream_speak(text, voice_name=voice_name)
+            return
+
         audio_array, sample_rate = self.synthesize(text, voice_name=voice_name)
         if len(audio_array) == 0:
             return
 
         sd.play(audio_array, samplerate=sample_rate)
         sd.wait()
+

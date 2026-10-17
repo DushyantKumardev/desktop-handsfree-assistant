@@ -11,6 +11,9 @@ logger = logging.getLogger(__name__)
 VK_VOLUME_MUTE = 0xAD
 VK_VOLUME_DOWN = 0xAE
 VK_VOLUME_UP = 0xAF
+VK_MEDIA_NEXT_TRACK = 0xB0
+VK_MEDIA_PREV_TRACK = 0xB1
+VK_MEDIA_STOP = 0xB2
 VK_MEDIA_PLAY_PAUSE = 0xB3
 KEYEVENTF_KEYUP = 0x0002
 
@@ -54,7 +57,15 @@ class SystemHandler:
                 cls._send_virtual_key(VK_VOLUME_MUTE)
                 return ExecutionResult(success=True, action="system_control", message="Volume mute toggled.")
 
-            elif "play" in cmd or "pause" in cmd or "roko" in cmd:
+            elif cmd in ("next", "next_track", "next song", "agla gaana"):
+                cls._send_virtual_key(VK_MEDIA_NEXT_TRACK)
+                return ExecutionResult(success=True, action="system_control", message="Skipped to next track.")
+
+            elif cmd in ("prev", "previous", "previous_track", "prev_track", "pichhla gaana"):
+                cls._send_virtual_key(VK_MEDIA_PREV_TRACK)
+                return ExecutionResult(success=True, action="system_control", message="Returned to previous track.")
+
+            elif any(w in cmd for w in ("play_pause", "pause", "resume", "media_toggle", "roko")) or cmd == "play":
                 cls._send_virtual_key(VK_MEDIA_PLAY_PAUSE)
                 return ExecutionResult(success=True, action="system_control", message="Media playback toggled.")
 

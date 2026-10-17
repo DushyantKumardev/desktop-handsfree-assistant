@@ -7,7 +7,7 @@
 DEFAULT_WAKEWORD_MODELS = ["alexa"]
 
 # Detection confidence threshold (0.0 to 1.0)
-DEFAULT_WAKEWORD_THRESHOLD = 0.55
+DEFAULT_WAKEWORD_THRESHOLD = 0.72
 
 # List of pre-trained models available offline in openWakeWord
 AVAILABLE_WAKEWORD_MODELS = [

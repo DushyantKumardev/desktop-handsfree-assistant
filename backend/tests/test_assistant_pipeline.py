@@ -18,7 +18,7 @@ from src.audio.recorder import AudioRecorder
 from src.audio.feedback import SoundFeedback
 from src.wakeword.detector import WakeWordDetector
 from src.stt.transcriber import STTTranscriber
-from src.agent.dispatcher import IntentDispatcher
+from src.agent.brain import LLMBrain
 from src.automation.executor import ActionExecutor
 from src.tts.synthesizer import TTSSynthesizer
 from src.core.config import config
@@ -38,7 +38,7 @@ def main() -> None:
     recorder = AudioRecorder()
     sounds = SoundFeedback()
     stt = STTTranscriber()
-    agent = IntentDispatcher()
+    brain = LLMBrain()
     executor = ActionExecutor()
     tts = TTSSynthesizer()
 
@@ -117,12 +117,13 @@ def main() -> None:
                     return
                 if not early_spoken and early_reply:
                     early_spoken = True
-                    print(f"\n[+] Speaking early status in background: \"{early_reply}\"")
-                    # Run speech in background so token stream finishes in parallel without 10s wait!
-                    tts_thread = threading.Thread(target=tts.speak, args=(early_reply,), daemon=True)
+                    reply_ttfa = time.time() - t1
+                    print(f"\n[+] [TTS STREAMING] First reply emitted in {reply_ttfa:.2f}s! Speaking: \"{early_reply}\"")
+                    # Stream chunks directly to soundcard in parallel with the rest of the LLM stream!
+                    tts_thread = threading.Thread(target=tts.speak, args=(early_reply,), kwargs={"stream": True}, daemon=True)
                     tts_thread.start()
 
-            intent = agent.process_command(
+            llm_resp = brain.process_command(
                 user_text,
                 on_reply_ready=on_reply_ready,
                 on_token=lambda tok: print(tok, end="", flush=True),
@@ -130,26 +131,27 @@ def main() -> None:
             print()  # newline after live streaming tokens
             llm_latency = time.time() - t1
 
-            print(f"  >>> [ACTION]:    {intent.action}")
-            print(f"  >>> [TARGET]:    {intent.target}")
-            print(f"  >>> [LLM REPLY]: \"{intent.speech_reply}\" ({llm_latency:.2f}s)")
+            print(f"  >>> [LLM REPLY]: \"{llm_resp.spoken_reply}\" ({llm_latency:.2f}s)")
 
-            # 5. Execute action on desktop OS concurrently
-            exec_res = executor.execute(intent)
-            print(f"  >>> [EXECUTION]: {exec_res.message} (Success: {exec_res.success})")
-
-            # 6. Final speech synchronization
-            if exec_res.spoken_override:
-                if tts_thread and tts_thread.is_alive():
-                    tts_thread.join()
-                print(f"[+] Speaking response: \"{exec_res.spoken_override}\"")
-                tts.speak(exec_res.spoken_override)
+            # 5. If tool calls were collected, execute them directly via Executor
+            if llm_resp.tool_calls:
+                for tc in llm_resp.tool_calls:
+                    print(f"  >>> [TOOL CALL]: {tc.name}({tc.args})")
+                exec_results = executor.execute_tools(llm_resp.tool_calls)
+                for res in exec_results:
+                    print(f"  >>> [EXECUTION]: {res.message} (Success: {res.success})")
+                    if res.spoken_override:
+                        if tts_thread and tts_thread.is_alive():
+                            tts_thread.join()
+                        print(f"[+] Speaking ground truth: \"{res.spoken_override}\"")
+                        tts.speak(res.spoken_override)
             elif not early_spoken:
-                speech_to_speak = intent.speech_reply
-                print(f"[+] Speaking response: \"{speech_to_speak}\"")
-                tts.speak(speech_to_speak)
-            elif tts_thread and tts_thread.is_alive():
-                # Wait for early speech to finish before reopening mic
+                # Direct conversational response
+                print(f"[+] Speaking response: \"{llm_resp.spoken_reply}\"")
+                tts.speak(llm_resp.spoken_reply)
+
+            # Wait for background speech to finish before reopening mic
+            if tts_thread and tts_thread.is_alive():
                 tts_thread.join()
 
 

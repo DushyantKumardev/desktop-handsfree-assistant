@@ -1,1 +1,5 @@
-"""Agent and Intent Dispatcher package powered by OpenAI-compatible LLMs."""
+"""LLM Agent and Brain package."""
+
+from .brain import LLMBrain
+
+__all__ = ["LLMBrain"]
