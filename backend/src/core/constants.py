@@ -48,6 +48,21 @@ DEFAULT_VAD_INITIAL_TIMEOUT = 4.0
 DEFAULT_VAD_MAX_RECORD_TIME = 10.0
 
 # ---------------------------------------------------------------------------
+# Speech-to-Text (STT) Constants (Faster-Whisper)
+# ---------------------------------------------------------------------------
+# Whisper model size: 'tiny.en' (~75MB) or 'base.en' (~145MB, recommended)
+DEFAULT_STT_MODEL_SIZE = "base.en"
+
+# Hardware execution device: 'cpu' (or 'cuda' if Nvidia GPU is present)
+DEFAULT_STT_DEVICE = "cpu"
+
+# Quantization type: 'int8' gives blazing fast speed and low RAM usage on CPU
+DEFAULT_STT_COMPUTE_TYPE = "int8"
+
+# Spoken language
+DEFAULT_STT_LANGUAGE = "en"
+
+# ---------------------------------------------------------------------------
 # Application Constants
 # ---------------------------------------------------------------------------
 DEFAULT_APP_ENV = "development"

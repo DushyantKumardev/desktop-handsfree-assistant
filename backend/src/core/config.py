@@ -17,11 +17,18 @@ from src.core.constants import (
     DEFAULT_VAD_SILENCE_TIMEOUT,
     DEFAULT_VAD_INITIAL_TIMEOUT,
     DEFAULT_VAD_MAX_RECORD_TIME,
+    DEFAULT_STT_MODEL_SIZE,
+    DEFAULT_STT_DEVICE,
+    DEFAULT_STT_COMPUTE_TYPE,
+    DEFAULT_STT_LANGUAGE,
 )
 
 # Automatically load environment variables from project-level .env if present
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 load_dotenv(_PROJECT_ROOT / ".env")
+
+# Silence benign Windows symlink warning from huggingface_hub
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
 @dataclass(frozen=True)
 class AudioConfig:
@@ -56,6 +63,14 @@ class VADConfig:
     max_record_time: float = float(os.getenv("VAD_MAX_RECORD_TIME", str(DEFAULT_VAD_MAX_RECORD_TIME)))
 
 @dataclass(frozen=True)
+class STTConfig:
+    """Local Speech-to-Text configuration using Faster-Whisper."""
+    model_size: str = os.getenv("STT_MODEL_SIZE", DEFAULT_STT_MODEL_SIZE)
+    device: str = os.getenv("STT_DEVICE", DEFAULT_STT_DEVICE)
+    compute_type: str = os.getenv("STT_COMPUTE_TYPE", DEFAULT_STT_COMPUTE_TYPE)
+    language: str = os.getenv("STT_LANGUAGE", DEFAULT_STT_LANGUAGE)
+
+@dataclass(frozen=True)
 class AppConfig:
     """Global backend application settings."""
     app_env: str = os.getenv("APP_ENV", DEFAULT_APP_ENV)
@@ -63,6 +78,7 @@ class AppConfig:
     audio: AudioConfig = field(default_factory=AudioConfig)
     wakeword: WakeWordConfig = field(default_factory=WakeWordConfig)
     vad: VADConfig = field(default_factory=VADConfig)
+    stt: STTConfig = field(default_factory=STTConfig)
 
 # Default global configuration instance
 config = AppConfig()

@@ -31,4 +31,10 @@ python tests/test_env.py
 
 # Live wake word test with microphone
 python tests/test_wakeword.py
+
+# Voice activity detection & command recording test
+python tests/test_vad.py
+
+# Full end-to-end Voice Recognition (Mic -> Wake Word -> VAD -> Local STT)
+python tests/test_stt.py
 ```
