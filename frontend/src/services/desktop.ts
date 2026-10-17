@@ -62,6 +62,30 @@ export const showWindow = async (): Promise<void> => {
   }
 };
 
+export const showNativeNotification = async (title: string, content: string): Promise<void> => {
+  if (isNativeEnvironment()) {
+    try {
+      await Neutralino.os.showNotification(title, content, 'INFO');
+      console.log(`[Desktop] Native notification shown: ${title} - ${content}`);
+    } catch (err) {
+      console.warn('[Desktop] Failed to show native notification:', err);
+    }
+  } else {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'granted') {
+        new Notification(title, { body: content });
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then((permission) => {
+          if (permission === 'granted') {
+            new Notification(title, { body: content });
+          }
+        });
+      }
+    }
+    console.log(`[Desktop] [Browser Notification] ${title}: ${content}`);
+  }
+};
+
 export const registerBlurAutoHide = (onBlurCallback?: () => void): void => {
   const handleBlur = () => {
     minimizeToTray();

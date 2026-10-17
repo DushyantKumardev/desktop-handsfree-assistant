@@ -139,6 +139,14 @@ class AssistantWSServer:
             "needs_followup": needs_followup,
         })
 
+    def broadcast_notification(self, title: str, message: str, task_id: Optional[str] = None) -> None:
+        """Broadcasts a notification event for native desktop toast display."""
+        self.broadcast("SERVER_NOTIFICATION", {
+            "title": title,
+            "message": message,
+            "taskId": task_id,
+        })
+
 
 # Global singleton instance
 ws_server = AssistantWSServer()

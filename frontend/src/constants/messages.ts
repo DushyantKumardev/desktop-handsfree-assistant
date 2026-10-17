@@ -22,5 +22,6 @@ export const UI_MESSAGES = {
 
   // Fallback labels
   DEFAULT_QUERY_TITLE: "Voice Request",
+  DEFAULT_NOTIFICATION_TITLE: "Assistant Alert",
   JUST_NOW: "Just now",
 } as const;

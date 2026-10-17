@@ -91,6 +91,8 @@ class ToolDefaultPhrases:
     LOCK_COMPUTER: Final[str] = "Locking your computer."
     WEB_SEARCH: Final[str] = "Searching for {query}."
     WEB_SEARCH_DEFAULT: Final[str] = "Searching the web."
+    SCHEDULE_ACTION: Final[str] = "Setting that schedule for you."
+    CANCEL_SCHEDULE: Final[str] = "Cancelling that schedule."
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +120,10 @@ class ActionMessages:
     GOOGLE_SEARCH_OPENED: Final[str] = "Opened Google search for '{query}'."
     YOUTUBE_OPENED: Final[str] = "Opened YouTube in browser."
     YOUTUBE_SEARCH_OPENED: Final[str] = "Opened YouTube search for '{query}'."
+
+    SCHEDULE_CREATED: Final[str] = "Scheduled '{description}' in {time_formatted}."
+    SCHEDULE_CANCELLED: Final[str] = "Cancelled schedule for '{description}'."
+    SCHEDULE_NOT_FOUND: Final[str] = "No active schedule found matching '{identifier}'."
 
 
 # ---------------------------------------------------------------------------

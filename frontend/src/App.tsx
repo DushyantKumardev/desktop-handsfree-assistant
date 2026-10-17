@@ -7,6 +7,7 @@ import {
   setWindowSize,
   handleWindowDrag,
   showWindow,
+  showNativeNotification,
 } from "./services/desktop";
 import {
   AssistantWebSocketClient,
@@ -109,6 +110,22 @@ export default function App() {
             setState("idle");
           }
           setLiveTranscript("");
+          break;
+        }
+
+        case "SERVER_NOTIFICATION": {
+          const payload = msg.payload as { title?: string; message?: string; taskId?: string };
+          const title = payload?.title || UI_MESSAGES.DEFAULT_NOTIFICATION_TITLE;
+          const body = payload?.message || "";
+          showNativeNotification(title, body);
+          showWindow();
+          setResponse({
+            id: Date.now().toString(),
+            query: title,
+            content: body,
+            isStreaming: false,
+            timestamp: UI_MESSAGES.JUST_NOW,
+          });
           break;
         }
 

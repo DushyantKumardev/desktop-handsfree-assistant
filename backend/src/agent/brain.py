@@ -8,6 +8,7 @@ from src.core.config import LLMConfig, config
 from src.core.constants import DEFAULT_SYSTEM_PROMPT
 from src.core.messages import AssistantResponses, ErrorMessages, ToolDefaultPhrases
 from src.tools import DESKTOP_TOOLS, ToolCall, LLMResponse
+from src.automation.scheduler import action_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +52,10 @@ class LLMBrain:
         if not user_query.strip():
             return LLMResponse(spoken_reply=AssistantResponses.EMPTY_QUERY, tool_calls=[], raw_query="", needs_followup=False)
 
-        # Inject real-time system clock and date directly into system prompt
+        # Inject real-time system clock and active schedules directly into system prompt
         now_str = datetime.datetime.now().strftime("%I:%M %p, %A, %B %d, %Y").lstrip("0")
-        prompt_content = DEFAULT_SYSTEM_PROMPT.format(current_time=now_str)
+        schedules_str = action_scheduler.get_context_summary()
+        prompt_content = DEFAULT_SYSTEM_PROMPT.format(current_time=now_str, active_schedules=schedules_str)
 
         # Build message payload with conversation memory
         messages: list[dict[str, Any]] = [
@@ -231,4 +233,8 @@ class LLMBrain:
         elif tool_name == "set_speaking_speed":
             # Let the tool's spoken override speak at the new speed directly
             return ""
+        elif tool_name == "schedule_action":
+            return ToolDefaultPhrases.SCHEDULE_ACTION
+        elif tool_name == "cancel_schedule":
+            return ToolDefaultPhrases.CANCEL_SCHEDULE
         return AssistantResponses.DEFAULT_FALLBACK

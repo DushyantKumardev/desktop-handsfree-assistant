@@ -10,6 +10,8 @@ from . import (
     lock_computer,
     web_search,
     set_speaking_speed,
+    schedule_action,
+    cancel_schedule,
 )
 
 ALL_TOOL_MODULES = [
@@ -22,4 +24,6 @@ ALL_TOOL_MODULES = [
     lock_computer,
     web_search,
     set_speaking_speed,
+    schedule_action,
+    cancel_schedule,
 ]
