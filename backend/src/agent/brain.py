@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import random
 import re
 from typing import Any, Callable, Optional
 from openai import OpenAI
@@ -75,14 +76,24 @@ class LLMBrain:
             "stream": True,
         }
 
-        # Extra body for OpenRouter to suppress reasoning delays
-        if "openrouter" in self.config.base_url.lower():
-            extra_body: dict[str, Any] = {
+        # Extra body to suppress reasoning delays across providers
+        extra_body: dict[str, Any] = {}
+        base_url_lower = self.config.base_url.lower()
+
+        if "openrouter" in base_url_lower:
+            extra_body.update({
                 "reasoning": {"max_tokens": 0},
                 "thinking": {"type": "disabled"},
-            }
+            })
             if self.config.reasoning_effort:
                 extra_body["reasoning_effort"] = self.config.reasoning_effort
+        elif "ollama" in base_url_lower or "11434" in base_url_lower:
+            extra_body.update({
+                "think": False,
+                "reasoning_effort": "none",
+            })
+
+        if extra_body:
             request_kwargs["extra_body"] = extra_body
 
         try:
@@ -173,7 +184,7 @@ class LLMBrain:
                     t_args = {}
                 collected_tools.append(ToolCall(name=t_name, args=t_args))
 
-            # If LLM called tools without speaking connecting text, provide default phrase
+            # If LLM called tools without speaking connecting text, use natural Siri/Google style phrasing
             if collected_tools and not clean_speech:
                 first_tool = collected_tools[0]
                 clean_speech = self._generate_default_phrase(first_tool.name, first_tool.args)
@@ -182,6 +193,16 @@ class LLMBrain:
                         on_sentence_ready(clean_speech)
                     if not first_sentence_emitted and callable(on_reply_ready):
                         on_reply_ready(clean_speech)
+
+            if not clean_speech and not collected_tools:
+                q_lower = user_query.lower()
+                if any(w in q_lower for w in ("timer", "schedule", "reminder", "alarm", "clock")):
+                    active_tasks = action_scheduler.get_active_tasks()
+                    if active_tasks:
+                        t = active_tasks[0]
+                        clean_speech = f"Ya got {t.format_remaining()} left on {t.description}."
+                    else:
+                        clean_speech = "No timers running right now."
 
             final_reply = clean_speech or AssistantResponses.DEFAULT_GREETING
 
@@ -210,31 +231,73 @@ class LLMBrain:
             )
 
     @staticmethod
-    def _generate_default_phrase(tool_name: str, args: dict[str, Any]) -> str:
-        """Fallback phrase if model was silent when requesting a tool."""
-        if tool_name == "open_app":
-            return ToolDefaultPhrases.OPEN_APP.format(app=args.get("app_name", "application"))
+    def _format_delay(seconds: float) -> str:
+        s = int(seconds)
+        if s >= 3600:
+            h = s // 3600
+            m = (s % 3600) // 60
+            return f"{h} hour{'s' if h > 1 else ''}" + (f" {m} minute{'s' if m > 1 else ''}" if m else "")
+        elif s >= 60:
+            m = s // 60
+            sec = s % 60
+            return f"{m} minute{'s' if m > 1 else ''}" + (f" {sec} second{'s' if sec > 1 else ''}" if sec else "")
+        return f"{s} second{'s' if s > 1 else ''}"
+
+    @classmethod
+    def _generate_default_phrase(cls, tool_name: str, args: dict[str, Any]) -> str:
+        """Human-like short, catchy conversational phrase with zero API cost."""
+        if tool_name == "schedule_action":
+            delay = args.get("delay_seconds", 0)
+            dur = cls._format_delay(delay) if delay else "that"
+            return random.choice([
+                f"Ya got it, {dur} on the clock.",
+                f"On it, {dur} set.",
+                f"Say less, {dur} starting now.",
+                f"Bet, {dur}.",
+            ])
+        elif tool_name == "cancel_schedule":
+            return random.choice([
+                "Cancelled.",
+                "Done, killed that timer.",
+                "Got it, cancelled.",
+            ])
+        elif tool_name == "open_app":
+            app = args.get("app_name", "app")
+            return random.choice([
+                f"Opening {app}.",
+                f"On it, launching {app}.",
+                f"Say less, opening {app}.",
+            ])
         elif tool_name == "play_media":
             q = args.get("query", "")
-            return ToolDefaultPhrases.PLAY_MEDIA.format(query=q) if q else ToolDefaultPhrases.PLAY_MEDIA_DEFAULT
+            return random.choice([
+                f"Playing {q}." if q else "Opening YouTube.",
+                f"On it, playing {q}." if q else "On it, opening YouTube.",
+                f"Say less, pulling up {q}." if q else "Say less, opening YouTube.",
+            ])
         elif tool_name == "media_control":
-            return ToolDefaultPhrases.MEDIA_CONTROL_NEXT if args.get("command") == "next_track" else ToolDefaultPhrases.MEDIA_CONTROL_TOGGLE
+            cmd = args.get("command", "")
+            return "Skipped." if cmd == "next_track" else "Done."
         elif tool_name == "set_volume":
-            return ToolDefaultPhrases.SET_VOLUME.format(level=args.get("level", 50))
+            lvl = args.get("level", 50)
+            return random.choice([
+                f"Volume at {lvl}%.",
+                f"Set to {lvl}%.",
+            ])
         elif tool_name == "adjust_volume":
-            return ToolDefaultPhrases.ADJUST_VOLUME.format(direction=args.get("direction", "up"))
+            d = args.get("direction", "up")
+            return f"Volume {d}."
         elif tool_name == "mute_volume":
-            return ToolDefaultPhrases.MUTE_VOLUME
+            return random.choice(["Muted.", "Done, muted."])
         elif tool_name == "lock_computer":
-            return ToolDefaultPhrases.LOCK_COMPUTER
+            return random.choice(["Locking down.", "Screen locked."])
         elif tool_name == "web_search":
             q = args.get("query", "")
-            return ToolDefaultPhrases.WEB_SEARCH.format(query=q) if q else ToolDefaultPhrases.WEB_SEARCH_DEFAULT
-        elif tool_name == "set_speaking_speed":
-            # Let the tool's spoken override speak at the new speed directly
+            return random.choice([
+                "Let me check.",
+                f"Checking {q}." if q else "Checking the web.",
+                "On it, looking that up.",
+            ])
+        elif tool_name in ("set_speaking_speed", "get_schedules"):
             return ""
-        elif tool_name == "schedule_action":
-            return ToolDefaultPhrases.SCHEDULE_ACTION
-        elif tool_name == "cancel_schedule":
-            return ToolDefaultPhrases.CANCEL_SCHEDULE
-        return AssistantResponses.DEFAULT_FALLBACK
+        return random.choice(["On it.", "Done.", "Ya got it.", "Say less."])

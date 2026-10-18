@@ -32,52 +32,50 @@ export const ResponseCard: React.FC<ResponseCardProps> = ({ response, onClose })
   return (
     <motion.div
       /* Enter: spring up from below the pill with a subtle scale bloom */
-      initial={{ opacity: 0, y: 18, scale: 0.94, filter: "blur(6px)" }}
-      animate={{ opacity: 1, y: 0,  scale: 1,    filter: "blur(0px)" }}
+      initial={{ opacity: 0, y: 14, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0,  scale: 1 }}
       /* Exit: quick scale-down + fade toward the pill */
       exit={{
         opacity: 0,
         y: 10,
-        scale: 0.95,
-        filter: "blur(4px)",
+        scale: 0.96,
         transition: EXIT_EASE,
       }}
       transition={ENTER_SPRING}
-      className="w-full mb-1.5 flex flex-col rounded-[18px] overflow-hidden border border-white/[0.09] shadow-[0_20px_50px_rgba(0,0,0,0.7)] backdrop-blur-2xl"
-      style={{ background: "linear-gradient(160deg, #1E1C1A 0%, #18160F 100%)", willChange: "transform, opacity, filter" }}
+      className="w-full mb-1.5 flex flex-col rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/80"
     >
-      {/* Slim top accent line */}
-      <div className="h-px w-full bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
+      {/* Slim top subtle accent line */}
+      <div className="h-px w-full bg-gradient-to-r from-transparent via-zinc-400/25 to-transparent" />
 
-      {/* Header: just query + streaming dot + close */}
-      <div className="flex items-center justify-between px-3.5 pt-2.5 pb-1.5">
-        {/* Left: query only */}
+      {/* Header: Query Badge + Actions */}
+      <div className="flex items-center justify-between px-3.5 pt-3 pb-2">
+        {/* Left: Query Badge */}
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          {/* Query echo — truncated, italic, subtle */}
           {response.query && (
-            <p className="text-[11px] text-white/40 italic font-light truncate min-w-0">
-              {response.query}
-            </p>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-zinc-900 text-zinc-300 border border-zinc-800 max-w-full truncate shadow-sm">
+              <span className="w-1.5 h-1.5 rounded-full bg-zinc-400" />
+              <span className="truncate">{response.query}</span>
+            </div>
           )}
         </div>
 
-        {/* Right: copy + close only */}
-        <div className="flex items-center gap-0.5 shrink-0 ml-2">
+        {/* Right: copy + close ghost action buttons */}
+        <div className="flex items-center gap-1 shrink-0 ml-2">
           <button
             onMouseDown={(e) => e.stopPropagation()}
             onClick={handleCopy}
-            className="w-6 h-6 flex items-center justify-center text-white/25 hover:text-white/60 rounded-lg hover:bg-white/8 transition-colors cursor-pointer"
-            title="Copy"
+            className="w-7 h-7 flex items-center justify-center text-zinc-400 hover:text-zinc-100 rounded-md hover:bg-zinc-800/80 transition-colors border border-transparent hover:border-zinc-700/60 cursor-pointer"
+            title="Copy response"
             type="button"
           >
             <AnimatePresence mode="wait">
               {copied ? (
-                <motion.span key="check" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} transition={{ duration: 0.13 }}>
-                  <Check className="w-3 h-3 text-emerald-400" />
+                <motion.span key="check" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} transition={{ duration: 0.12 }}>
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
                 </motion.span>
               ) : (
-                <motion.span key="copy" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} transition={{ duration: 0.13 }}>
-                  <Copy className="w-3 h-3" />
+                <motion.span key="copy" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} transition={{ duration: 0.12 }}>
+                  <Copy className="w-3.5 h-3.5" />
                 </motion.span>
               )}
             </AnimatePresence>
@@ -87,25 +85,28 @@ export const ResponseCard: React.FC<ResponseCardProps> = ({ response, onClose })
             <button
               onMouseDown={(e) => e.stopPropagation()}
               onClick={onClose}
-              className="w-6 h-6 flex items-center justify-center text-white/25 hover:text-white/60 rounded-lg hover:bg-white/8 transition-colors cursor-pointer"
+              className="w-7 h-7 flex items-center justify-center text-zinc-400 hover:text-zinc-100 rounded-md hover:bg-zinc-800/80 transition-colors border border-transparent hover:border-zinc-700/60 cursor-pointer"
               title="Dismiss"
               type="button"
             >
-              <X className="w-3 h-3" />
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
       </div>
 
       {/* Divider */}
-      <div className="mx-3.5 h-px bg-white/[0.06]" />
+      <div className="mx-3.5 h-px bg-zinc-800/70" />
 
       {/* Scrollable response body */}
       <div
         ref={scrollRef}
-        className="px-3.5 py-2.5 max-h-[160px] overflow-y-auto text-[13px] leading-[1.72] text-slate-100/88 font-light tracking-wide select-text"
+        className="px-3.5 py-3 max-h-[170px] overflow-y-auto text-[13px] leading-relaxed text-zinc-200 font-normal tracking-tight select-text"
       >
         <span className="whitespace-pre-line">{response.content}</span>
+        {response.isStreaming && (
+          <span className="inline-block w-1.5 h-3.5 ml-1 bg-zinc-300 cursor-blink align-middle" />
+        )}
       </div>
     </motion.div>
   );

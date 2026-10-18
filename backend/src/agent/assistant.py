@@ -244,11 +244,13 @@ class HandsfreeAssistant:
 
                     exec_results = self.executor.execute_tools(llm_resp.tool_calls)
                     for res in exec_results:
-                        if res.spoken_override:
+                        # Only speak tool spoken_override if assistant was silent or testing speaking speed
+                        if res.spoken_override and (not clean_reply or res.action == "set_speaking_speed"):
                             clean_override = TTSSynthesizer.clean_spoken_text(res.spoken_override)
                             print(f">>> [RESULT]: \"{clean_override}\"")
                             ws_server.broadcast_stream_chunk(clean_override, user_text)
                             speech_queue.put(clean_override)
+                            clean_reply = clean_override
                 elif first_speech and clean_reply:
                     speech_queue.put(clean_reply)
 

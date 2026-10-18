@@ -17,7 +17,7 @@ export const TopControlBar: React.FC<TopControlBarProps> = ({ onMinimize }) => {
     >
       <button
         onClick={onMinimize}
-        className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#1A1816]/90 hover:bg-[#252321] border border-white/10 text-white/70 hover:text-white text-[11px] font-medium tracking-wide shadow-md backdrop-blur-md transition-all select-none"
+        className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-zinc-100 text-[11px] font-medium tracking-tight shadow-md transition-all select-none"
         type="button"
         title="Minimize overlay"
       >

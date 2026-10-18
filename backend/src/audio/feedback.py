@@ -95,8 +95,11 @@ class SoundFeedback:
         # 1. Primary method for WAV files: direct lossless read via scipy.io.wavfile
         if file_path.suffix.lower() == ".wav":
             try:
+                import warnings
                 from scipy.io import wavfile
-                sample_rate, audio = wavfile.read(str(file_path))
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    sample_rate, audio = wavfile.read(str(file_path))
             except Exception as e:
                 logger.debug("scipy.io.wavfile read failed for %s (%s). Trying wave module.", file_path, e)
                 try:

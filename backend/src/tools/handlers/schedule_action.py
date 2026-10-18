@@ -59,11 +59,9 @@ def execute(
 
     remaining_str = task.format_remaining()
     msg = ActionMessages.SCHEDULE_CREATED.format(description=task.description, time_formatted=remaining_str)
-    spoken = f"Timer set for {task.description} in {remaining_str}." if action_type == "reminder" else f"Scheduled {task.description} in {remaining_str}."
-
     return ExecutionResult(
         success=True,
         action="schedule_action",
         message=msg,
-        spoken_override=spoken,
+        spoken_override=None,
     )

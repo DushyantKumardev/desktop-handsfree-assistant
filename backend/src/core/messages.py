@@ -32,12 +32,12 @@ class ErrorMessages:
 class AssistantResponses:
     """Core spoken conversational feedback phrases."""
 
-    NO_SPEECH_HEARD: Final[str] = "I could not hear anything."
-    EMPTY_QUERY: Final[str] = "I did not catch that."
-    DEFAULT_GREETING: Final[str] = "Hello! How can I assist you?"
-    DEFAULT_FALLBACK: Final[str] = "Right away."
-    ACTION_COMPLETED: Final[str] = "Action completed."
-    TOOL_DEFAULT_WORKING: Final[str] = "Working on that for you, give me a moment."
+    NO_SPEECH_HEARD: Final[str] = "Didn't catch that."
+    EMPTY_QUERY: Final[str] = "Missed that, say again?"
+    DEFAULT_GREETING: Final[str] = "Yo, what's up?"
+    DEFAULT_FALLBACK: Final[str] = "On it."
+    ACTION_COMPLETED: Final[str] = "Done."
+    TOOL_DEFAULT_WORKING: Final[str] = "On it, one sec."
 
 
 # ---------------------------------------------------------------------------
@@ -47,31 +47,31 @@ class ToolEngagementPhrases:
     """Phrases spoken to engage the user before running long operations."""
 
     WEB_SEARCH_HINDI: Final[list[str]] = [
-        "Main abhi internet par check karke batata hoon, ek second.",
-        "Dekhta hoon, online search kar raha hoon, ek pal dijiye.",
-        "Iske baare mein abhi search karta hoon, bas ek second.",
+        "Ek sec ruk, check karta hoon.",
+        "Ruk, online check karta hoon.",
+        "Dekhta hoon, bas ek sec.",
     ]
 
     WEB_SEARCH_ENGLISH_QUERY: Final[list[str]] = [
-        "Let me check the web for {query}, give me just a moment.",
-        "Looking that up on the web for you right now, one second.",
-        "Searching online for {query}, give me a second.",
-        "Let me find that information for you, one moment.",
+        "Let me check that real quick.",
+        "Looking into that, one sec.",
+        "On it, checking the web.",
+        "Let me check.",
     ]
 
     WEB_SEARCH_ENGLISH_DEFAULT: Final[list[str]] = [
-        "Let me check the web for that, give me just a moment.",
-        "Looking into that right now, one moment.",
-        "Searching online for you, give me a second.",
+        "Let me check.",
+        "Looking into it, one sec.",
+        "Checking the web now.",
     ]
 
-    PLAY_MEDIA_HINDI_QUERY: Final[str] = "YouTube par {query} dhoondh raha hoon, ek second."
-    PLAY_MEDIA_HINDI_DEFAULT: Final[str] = "YouTube chala raha hoon, ek second."
-    PLAY_MEDIA_ENGLISH_QUERY: Final[str] = "Looking up {query} on YouTube for you, one moment."
-    PLAY_MEDIA_ENGLISH_DEFAULT: Final[str] = "Opening YouTube for you, one moment."
+    PLAY_MEDIA_HINDI_QUERY: Final[str] = "YouTube par chala raha hoon, ek sec."
+    PLAY_MEDIA_HINDI_DEFAULT: Final[str] = "YouTube khol raha hoon."
+    PLAY_MEDIA_ENGLISH_QUERY: Final[str] = "Playing {query}."
+    PLAY_MEDIA_ENGLISH_DEFAULT: Final[str] = "Opening YouTube."
 
-    OPEN_APP_HINDI: Final[str] = "{app} open kar raha hoon, ek second."
-    OPEN_APP_ENGLISH: Final[str] = "Opening {app} for you right away."
+    OPEN_APP_HINDI: Final[str] = "{app} khol raha hoon."
+    OPEN_APP_ENGLISH: Final[str] = "Opening {app}."
 
 
 # ---------------------------------------------------------------------------
@@ -81,18 +81,18 @@ class ToolDefaultPhrases:
     """Spoken phrases used as fallbacks when LLM emits a tool call without speech."""
 
     OPEN_APP: Final[str] = "Opening {app}."
-    PLAY_MEDIA: Final[str] = "Playing {query} on YouTube."
+    PLAY_MEDIA: Final[str] = "Playing {query}."
     PLAY_MEDIA_DEFAULT: Final[str] = "Opening YouTube."
-    MEDIA_CONTROL_NEXT: Final[str] = "Skipping track."
-    MEDIA_CONTROL_TOGGLE: Final[str] = "Toggling playback."
-    SET_VOLUME: Final[str] = "Setting volume to {level} percent."
-    ADJUST_VOLUME: Final[str] = "Turning volume {direction}."
-    MUTE_VOLUME: Final[str] = "Toggling mute."
-    LOCK_COMPUTER: Final[str] = "Locking your computer."
-    WEB_SEARCH: Final[str] = "Searching for {query}."
-    WEB_SEARCH_DEFAULT: Final[str] = "Searching the web."
-    SCHEDULE_ACTION: Final[str] = "Setting that schedule for you."
-    CANCEL_SCHEDULE: Final[str] = "Cancelling that schedule."
+    MEDIA_CONTROL_NEXT: Final[str] = "Skipped."
+    MEDIA_CONTROL_TOGGLE: Final[str] = "Done."
+    SET_VOLUME: Final[str] = "Volume at {level}%."
+    ADJUST_VOLUME: Final[str] = "Volume {direction}."
+    MUTE_VOLUME: Final[str] = "Muted."
+    LOCK_COMPUTER: Final[str] = "Locking screen."
+    WEB_SEARCH: Final[str] = "Checking {query}."
+    WEB_SEARCH_DEFAULT: Final[str] = "Let me check."
+    SCHEDULE_ACTION: Final[str] = "Ya got it, timer set."
+    CANCEL_SCHEDULE: Final[str] = "Cancelled."
 
 
 # ---------------------------------------------------------------------------

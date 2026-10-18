@@ -13,28 +13,28 @@ interface FloatingPillProps {
   isFollowup?: boolean;
 }
 
-// Wave color + orb config per state
+// Wave color + orb config per state in refined shadcn palette
 const STATE_CONFIG = {
   listening: {
-    waveColor:  "rgba(251, 146, 60, 1)",   // amber-400
-    orbColor:   "rgba(194, 98, 0, 0.50)",
-    intensity:  0.9,
-    label:      null,
-    textColor:  "text-amber-200/80",
+    waveColor: "rgba(250, 250, 250, 0.9)", // zinc-50 / white wave
+    orbColor: "rgba(255, 255, 255, 0.18)",
+    intensity: 0.8,
+    label: null,
+    textColor: "text-zinc-100",
   },
   thinking: {
-    waveColor:  "rgba(167, 139, 250, 1)",  // violet-400
-    orbColor:   "rgba(124, 77, 255, 0.40)",
-    intensity:  0.6,
-    label:      UI_MESSAGES.THINKING,
-    textColor:  "text-white/60",
+    waveColor: "rgba(168, 85, 247, 0.9)", // violet-500
+    orbColor: "rgba(147, 51, 234, 0.25)",
+    intensity: 0.6,
+    label: UI_MESSAGES.THINKING,
+    textColor: "text-zinc-300",
   },
   speaking: {
-    waveColor:  "rgba(52, 211, 153, 1)",   // emerald-400
-    orbColor:   "rgba(5, 150, 105, 0.35)",
-    intensity:  1.0,
-    label:      null,
-    textColor:  "text-emerald-200/80",
+    waveColor: "rgba(16, 185, 129, 0.9)", // emerald-500
+    orbColor: "rgba(5, 150, 105, 0.25)",
+    intensity: 0.9,
+    label: null,
+    textColor: "text-emerald-400",
   },
 };
 
@@ -46,34 +46,34 @@ export const FloatingPill: React.FC<FloatingPillProps> = ({
   isFollowup = false,
 }) => {
   const isListening = state === "listening";
-  const isThinking  = state === "thinking";
-  const isSpeaking  = state === "speaking";
-  const isActive    = isListening || isThinking || isSpeaking;
+  const isThinking = state === "thinking";
+  const isSpeaking = state === "speaking";
+  const isActive = isListening || isThinking || isSpeaking;
 
   const cfg = isListening
     ? STATE_CONFIG.listening
     : isThinking
-    ? STATE_CONFIG.thinking
-    : isSpeaking
-    ? STATE_CONFIG.speaking
-    : null;
+      ? STATE_CONFIG.thinking
+      : isSpeaking
+        ? STATE_CONFIG.speaking
+        : null;
 
-  // Mic button gradient shifts per state
+  // Mic button styling per shadcn state
   const micBg = isListening
-    ? "bg-gradient-to-br from-[#E06B00] to-[#B84E00]"
+    ? "bg-zinc-100 text-zinc-950 border-white shadow-[0_0_20px_rgba(255,255,255,0.35)]"
     : isThinking
-    ? "bg-gradient-to-br from-[#7C4DFF] to-[#5B37C5]"
-    : isSpeaking
-    ? "bg-gradient-to-br from-[#059669] to-[#047857]"
-    : "bg-gradient-to-br from-[#C26200] to-[#943F00]";
+      ? "bg-violet-600 text-white border-violet-400/40 shadow-[0_0_16px_rgba(139,92,246,0.35)]"
+      : isSpeaking
+        ? "bg-emerald-600 text-white border-emerald-400/40 shadow-[0_0_16px_rgba(16,185,129,0.35)]"
+        : "bg-zinc-900/90 hover:bg-zinc-800 text-zinc-200 border-zinc-700/70 hover:border-zinc-500/80 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]";
 
   return (
     <motion.div
       layout
-      className={`relative w-full flex items-center justify-between px-3 py-2 rounded-full border shadow-[0_16px_48px_rgba(0,0,0,0.7)] backdrop-blur-2xl select-none overflow-hidden transition-colors duration-500 ${
+      className={`relative w-full flex items-center justify-between px-3.5 py-2.5 rounded-full border shadow-2xl shadow-black/80 select-none overflow-hidden transition-all duration-300 ${
         isActive
-          ? "bg-[#1C1A18]/98 border-white/[0.14]"
-          : "bg-[#1E1C1A]/95 border-white/[0.09]"
+          ? "bg-zinc-950 border-zinc-700/80"
+          : "bg-zinc-950 border-zinc-800 hover:border-zinc-700/60"
       }`}
     >
       {/* ── Background waveform layer (behind everything) ──────────────────── */}
@@ -85,7 +85,13 @@ export const FloatingPill: React.FC<FloatingPillProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.5, ease: "easeInOut" }}
-            style={{ position: "absolute", inset: 0, zIndex: 0, borderRadius: "9999px", overflow: "hidden" }}
+            style={{
+              position: "absolute",
+              inset: 0,
+              zIndex: 0,
+              borderRadius: "9999px",
+              overflow: "hidden",
+            }}
           >
             <BackgroundWaveform
               color={cfg.waveColor}
@@ -105,26 +111,26 @@ export const FloatingPill: React.FC<FloatingPillProps> = ({
             initial={{ opacity: 0, scale: 0.6, y: 20 }}
             animate={{
               opacity: [0.7, 1, 0.75],
-              scale:   [1, 1.2, 1],
-              y:       [8, 2, 8],
-              x:       [0, 5, -4, 0],
+              scale: [1, 1.2, 1],
+              y: [8, 2, 8],
+              x: [0, 5, -4, 0],
             }}
             exit={{ opacity: 0, scale: 0.5, y: 20 }}
             transition={{
               opacity: { duration: 0.4, ease: "easeOut" },
-              scale:   { duration: 3.5, repeat: Infinity, ease: "easeInOut" },
-              y:       { duration: 3.5, repeat: Infinity, ease: "easeInOut" },
-              x:       { duration: 5,   repeat: Infinity, ease: "easeInOut" },
+              scale: { duration: 3.5, repeat: Infinity, ease: "easeInOut" },
+              y: { duration: 3.5, repeat: Infinity, ease: "easeInOut" },
+              x: { duration: 5, repeat: Infinity, ease: "easeInOut" },
             }}
             style={{
-              position:  "absolute",
-              bottom:    "-28px",
-              left:      "50%",
+              position: "absolute",
+              bottom: "-28px",
+              left: "50%",
               transform: "translateX(-50%)",
-              width:     "220px",
-              height:    "80px",
-              background:`radial-gradient(ellipse at 50% 100%, ${cfg.orbColor} 0%, transparent 72%)`,
-              filter:    "blur(1px)",
+              width: "220px",
+              height: "80px",
+              background: `radial-gradient(ellipse at 50% 100%, ${cfg.orbColor} 0%, transparent 72%)`,
+              filter: "blur(1px)",
               pointerEvents: "none",
               zIndex: 0,
             }}
@@ -143,10 +149,10 @@ export const FloatingPill: React.FC<FloatingPillProps> = ({
             transition={{ duration: 0.4, ease: "easeOut" }}
             className={`absolute inset-x-8 top-0 h-px rounded-full pointer-events-none ${
               isListening
-                ? "bg-gradient-to-r from-transparent via-amber-400/55 to-transparent"
+                ? "bg-gradient-to-r from-transparent via-white/50 to-transparent"
                 : isThinking
-                ? "bg-gradient-to-r from-transparent via-violet-400/55 to-transparent"
-                : "bg-gradient-to-r from-transparent via-emerald-400/55 to-transparent"
+                  ? "bg-gradient-to-r from-transparent via-violet-400/50 to-transparent"
+                  : "bg-gradient-to-r from-transparent via-emerald-400/50 to-transparent"
             }`}
           />
         )}
@@ -158,29 +164,20 @@ export const FloatingPill: React.FC<FloatingPillProps> = ({
       <div className="relative z-10 flex items-center">
         <div className="relative w-7 h-7 flex items-center justify-center">
           <Radio
-            className={`w-3.5 h-3.5 transition-colors duration-500 ${
+            color={
               connectionStatus === "connected"
-                ? "text-emerald-400"
+                ? "green"
                 : connectionStatus === "connecting"
-                ? "text-amber-400"
-                : "text-white/20"
-            }`}
-          />
-          <span
-            className={`absolute bottom-0.5 right-0.5 w-1.5 h-1.5 rounded-full ${
-              connectionStatus === "connected"
-                ? "bg-emerald-500 orb-pulse shadow-[0_0_6px_rgba(16,185,129,0.8)]"
-                : connectionStatus === "connecting"
-                ? "bg-amber-400 animate-pulse"
-                : "bg-white/15"
-            }`}
-            title={
-              connectionStatus === "connected"
-                ? UI_MESSAGES.CONNECTED
-                : connectionStatus === "connecting"
-                ? UI_MESSAGES.CONNECTING
-                : UI_MESSAGES.OFFLINE
+                  ? "yellow"
+                  : "gray"
             }
+            className={`w-3.5 h-3.5 transition-colors duration-300 ${
+              connectionStatus === "connected"
+                ? "text-zinc-400"
+                : connectionStatus === "connecting"
+                  ? "text-amber-400"
+                  : "text-zinc-600"
+            }`}
           />
         </div>
       </div>
@@ -191,54 +188,66 @@ export const FloatingPill: React.FC<FloatingPillProps> = ({
           {isListening ? (
             <motion.div
               key="listening"
-              initial={{ opacity: 0, y: 5 }}
+              initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -5 }}
-              transition={{ duration: 0.18 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.16 }}
               className="flex items-center gap-2 max-w-full min-w-0"
             >
               {liveTranscript ? (
-                <span className="text-[11px] text-amber-100/90 truncate italic font-light tracking-wide drop-shadow-sm">
-                  {liveTranscript}
+                <span className="text-[12px] text-zinc-100 truncate font-normal tracking-tight">
+                  "{liveTranscript}"
                 </span>
               ) : (
                 <motion.span
-                  animate={{ opacity: [0.45, 0.9, 0.45] }}
-                  transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
-                  className="text-[12px] text-amber-200/70 font-light tracking-wide"
+                  animate={{ opacity: [0.6, 1, 0.6] }}
+                  transition={{
+                    duration: 1.8,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
+                  className="text-[12px] text-zinc-200 font-medium tracking-tight"
                 >
-                  {isFollowup ? UI_MESSAGES.LISTENING_FOLLOWUP : UI_MESSAGES.LISTENING}
+                  {isFollowup
+                    ? UI_MESSAGES.LISTENING_FOLLOWUP
+                    : UI_MESSAGES.LISTENING}
                 </motion.span>
               )}
             </motion.div>
           ) : isThinking ? (
             <motion.div
               key="thinking"
-              initial={{ opacity: 0, y: 5 }}
+              initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -5 }}
-              transition={{ duration: 0.18 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.16 }}
+              className="flex items-center gap-1.5"
             >
-              <motion.span
-                animate={{ opacity: [0.45, 0.95, 0.45] }}
-                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                className="text-[12px] text-white/65 font-light tracking-wide"
-              >
+              <span className="text-[12px] text-zinc-300 font-medium tracking-tight">
                 {UI_MESSAGES.THINKING}
-              </motion.span>
+              </span>
+              <span className="inline-flex gap-1 items-center">
+                <span className="w-1 h-1 rounded-full bg-violet-400 dot-bounce-1" />
+                <span className="w-1 h-1 rounded-full bg-violet-400 dot-bounce-2" />
+                <span className="w-1 h-1 rounded-full bg-violet-400 dot-bounce-3" />
+              </span>
             </motion.div>
           ) : isSpeaking ? (
             <motion.div
               key="speaking"
-              initial={{ opacity: 0, y: 5 }}
+              initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -5 }}
-              transition={{ duration: 0.18 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.16 }}
             >
               <motion.span
-                animate={{ opacity: [0.55, 1, 0.55] }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-                className="text-[12px] text-emerald-200/80 font-light tracking-wide"
+                animate={{ opacity: [0.7, 1, 0.7] }}
+                transition={{
+                  duration: 1.5,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                }}
+                className="text-[12px] text-emerald-400 font-medium tracking-tight"
               >
                 {UI_MESSAGES.SPEAKING}
               </motion.span>
@@ -246,11 +255,11 @@ export const FloatingPill: React.FC<FloatingPillProps> = ({
           ) : (
             <motion.span
               key="idle"
-              initial={{ opacity: 0, y: 5 }}
+              initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -5 }}
-              transition={{ duration: 0.18 }}
-              className="text-[12px] text-white/28 tracking-wide font-light"
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.16 }}
+              className="text-[12px] text-zinc-400 tracking-tight font-normal"
             >
               {connectionStatus === "connected"
                 ? UI_MESSAGES.IDLE_PROMPT
@@ -262,11 +271,11 @@ export const FloatingPill: React.FC<FloatingPillProps> = ({
 
       {/* Right: mic button */}
       <motion.button
-        className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg cursor-pointer transition-all duration-300 ${micBg} ${
+        className={`relative z-10 w-9 h-9 rounded-full flex items-center justify-center cursor-pointer transition-all duration-200 border ${micBg} ${
           isListening ? "mic-glow" : ""
         }`}
-        whileHover={{ scale: 1.07 }}
-        whileTap={{ scale: 0.92 }}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.94 }}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={onToggleMic}
         title={isActive ? UI_MESSAGES.MIC_STOP : UI_MESSAGES.MIC_START}

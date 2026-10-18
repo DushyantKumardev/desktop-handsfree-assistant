@@ -12,6 +12,7 @@ from . import (
     set_speaking_speed,
     schedule_action,
     cancel_schedule,
+    get_schedules,
 )
 
 ALL_TOOL_MODULES = [
@@ -26,4 +27,5 @@ ALL_TOOL_MODULES = [
     set_speaking_speed,
     schedule_action,
     cancel_schedule,
+    get_schedules,
 ]
