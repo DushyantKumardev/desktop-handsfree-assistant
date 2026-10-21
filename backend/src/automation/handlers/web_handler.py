@@ -22,7 +22,7 @@ class WebHandler:
         """
         Headlessly searches the web for answers/news without opening a browser window.
         Uses Serper (Google Search API) if configured, with DuckDuckGo and Wikipedia fallback.
-        Returns the concise spoken summary in `spoken_override` for instant TTS playback.
+        Returns the concise spoken summary in `spoken_override` and full snippets in `data`.
         """
         clean_q = query.strip()
         logger.info("Executing headless web search for: '%s'", clean_q)
@@ -38,11 +38,15 @@ class WebHandler:
         if not summary:
             summary = cls._search_via_ddgs(clean_q)
 
-        # 3. Fallback: DuckDuckGo Instant Answer API
+        # 3. Fallback: DuckDuckGo HTML endpoint
+        if not summary:
+            summary = cls._search_via_ddg_html(clean_q)
+
+        # 4. Fallback: DuckDuckGo Instant Answer API
         if not summary:
             summary = cls._search_via_ddg_api(clean_q)
 
-        # 4. Fallback: Wikipedia Summary API
+        # 5. Fallback: Wikipedia Summary API
         if not summary:
             summary = cls._search_via_wikipedia(clean_q)
 
@@ -52,10 +56,17 @@ class WebHandler:
                 action="web_search",
                 message=ActionMessages.WEB_SEARCH_RETRIEVED.format(query=clean_q),
                 spoken_override=summary,
+                data={"query": clean_q, "snippets": summary},
             )
 
-        # 5. If all headless APIs fail, open browser as fallback
-        return cls.open_browser_search(clean_q)
+        # If all headless searches find nothing, return informative speech rather than silent browser popup
+        return ExecutionResult(
+            success=False,
+            action="web_search",
+            message=f"No online results found for '{clean_q}'.",
+            spoken_override="Couldn't find anything on that right now.",
+            data={"query": clean_q, "snippets": ""},
+        )
 
     @classmethod
     def _search_via_serper(cls, query: str, api_key: str) -> Optional[str]:
@@ -115,6 +126,16 @@ class WebHandler:
         try:
             from duckduckgo_search import DDGS
             with DDGS() as ddgs:
+                if any(w in query.lower() for w in ("news", "latest", "update", "today")):
+                    try:
+                        news_results = list(ddgs.news(query, max_results=3))
+                        if news_results:
+                            snippets = [r.get("body", "").strip() for r in news_results if r.get("body")]
+                            if snippets:
+                                return cls._clean_spoken_summary(" ".join(snippets[:2]))
+                    except Exception:
+                        pass
+
                 results = list(ddgs.text(query, max_results=3))
                 if results:
                     snippets = [r.get("body", "").strip() for r in results if r.get("body")]
@@ -123,6 +144,35 @@ class WebHandler:
                         return cls._clean_spoken_summary(combined)
         except Exception as e:
             logger.debug("DDGS search failed: %s", e)
+        return None
+
+    @classmethod
+    def _search_via_ddg_html(cls, query: str) -> Optional[str]:
+        """Direct HTTP search using DuckDuckGo HTML without external library dependencies."""
+        try:
+            encoded = urllib.parse.quote_plus(query)
+            url = f"https://html.duckduckgo.com/html/?q={encoded}"
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept-Language": "en-US,en;q=0.9",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=4.0) as resp:
+                html = resp.read().decode("utf-8", errors="ignore")
+
+            raw_snippets = re.findall(r'<a class="result__snippet"[^>]*>(.*?)</a>', html, flags=re.DOTALL)
+            clean_snippets = []
+            for s in raw_snippets[:3]:
+                text = re.sub(r"<[^>]+>", "", s)
+                text = re.sub(r"\s+", " ", text).strip()
+                if text:
+                    clean_snippets.append(text)
+            if clean_snippets:
+                return cls._clean_spoken_summary(" ".join(clean_snippets[:2]))
+        except Exception as e:
+            logger.debug("DDG HTML search fallback failed: %s", e)
         return None
 
     @classmethod

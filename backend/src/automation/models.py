@@ -1,7 +1,7 @@
 """Data models for desktop OS automation execution."""
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 
 @dataclass
@@ -11,3 +11,4 @@ class ExecutionResult:
     action: str
     message: str
     spoken_override: Optional[str] = None
+    data: Optional[Any] = None

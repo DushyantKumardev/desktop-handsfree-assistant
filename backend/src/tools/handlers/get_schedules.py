@@ -18,22 +18,21 @@ DEFINITION: dict[str, Any] = {
 
 
 def execute() -> ExecutionResult:
-    """Retrieve and report all currently active schedules."""
-    active_summary = action_scheduler.get_context_summary()
+    """Retrieve all currently active schedules and return structured data to the LLM."""
     active_tasks = action_scheduler.get_active_tasks()
-
     if not active_tasks:
-        spoken = "You have no active timers or scheduled reminders."
+        summary = "No active timers or scheduled reminders."
     elif len(active_tasks) == 1:
         t = active_tasks[0]
-        spoken = f"Your {t.description} has {t.format_remaining()} remaining."
+        summary = f"1 active timer: '{t.description}' with {t.format_remaining()} remaining."
     else:
-        items = [f"{t.description} with {t.format_remaining()} left" for t in active_tasks]
-        spoken = f"You have {len(active_tasks)} active schedules: {', '.join(items)}."
+        items = [f"'{t.description}' with {t.format_remaining()} remaining" for t in active_tasks]
+        summary = f"{len(active_tasks)} active timers: {', '.join(items)}."
 
     return ExecutionResult(
         success=True,
         action="get_schedules",
-        message=active_summary,
-        spoken_override=spoken,
+        message=summary,
+        spoken_override=None,
+        data={"summary": summary, "task_count": len(active_tasks)},
     )

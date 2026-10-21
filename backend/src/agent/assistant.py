@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from src.core.config import config
-from src.core.messages import AssistantResponses, ToolEngagementPhrases
+from src.core.messages import AssistantResponses
 from src.audio.capture import AudioCapture
 from src.audio.recorder import AudioRecorder
 from src.audio.feedback import SoundFeedback
@@ -68,39 +68,6 @@ class HandsfreeAssistant:
         print(f"  Piper TTS:  {config.tts.voice} (Speed: {self.tts.speed:.2f}x)")
         print("=" * 65)
 
-    @staticmethod
-    def _get_tool_engagement_phrase(tool_call: Any, user_text: str) -> str:
-        """Dynamic conversational engagement spoken before executing long-running tools."""
-        name = getattr(tool_call, "name", "")
-        args = getattr(tool_call, "args", {}) or {}
-        query = args.get("query", "").strip()
-        is_hindi = any(w in user_text.lower() for w in ("kya", "kaun", "kab", "kaha", "batao", "dhundo", "khojo", "karo", "hai", "mujhe", "samay", "baj"))
-
-        if name == "web_search":
-            if is_hindi:
-                options = ToolEngagementPhrases.WEB_SEARCH_HINDI
-            else:
-                if query:
-                    clean_q = re.sub(r"[^\w\s]", "", query)
-                    options = [p.format(query=clean_q) for p in ToolEngagementPhrases.WEB_SEARCH_ENGLISH_QUERY]
-                else:
-                    options = ToolEngagementPhrases.WEB_SEARCH_ENGLISH_DEFAULT
-            return random.choice(options)
-
-        elif name == "play_media":
-            if is_hindi:
-                return ToolEngagementPhrases.PLAY_MEDIA_HINDI_QUERY.format(query=query) if query else ToolEngagementPhrases.PLAY_MEDIA_HINDI_DEFAULT
-            return ToolEngagementPhrases.PLAY_MEDIA_ENGLISH_QUERY.format(query=query) if query else ToolEngagementPhrases.PLAY_MEDIA_ENGLISH_DEFAULT
-
-        elif name == "open_app":
-            app = args.get("app_name", "app")
-            return ToolEngagementPhrases.OPEN_APP_HINDI.format(app=app) if is_hindi else ToolEngagementPhrases.OPEN_APP_ENGLISH.format(app=app)
-
-        elif name == "set_speaking_speed":
-            # set_speaking_speed provides its own immediate spoken confirmation at the new speed
-            return ""
-
-        return AssistantResponses.TOOL_DEFAULT_WORKING
 
     def _on_wake_detected(self, model_name: str, confidence: float) -> None:
         """Callback fired when wake word is detected."""
@@ -232,22 +199,37 @@ class HandsfreeAssistant:
                     for tc in llm_resp.tool_calls:
                         print(f">>> [ACTION]: {tc.name}({tc.args})")
 
-                    # If the LLM didn't speak an opener, engage user with short talk before calling tool
-                    if first_speech or not clean_reply:
-                        engagement = self._get_tool_engagement_phrase(llm_resp.tool_calls[0], user_text)
-                        if engagement:
-                            first_speech = False
-                            clean_eng = TTSSynthesizer.clean_spoken_text(engagement)
-                            print(f">>> [ENGAGEMENT]: \"{clean_eng}\"")
-                            ws_server.broadcast_stream_chunk(clean_eng, user_text)
-                            speech_queue.put(clean_eng)
-
                     exec_results = self.executor.execute_tools(llm_resp.tool_calls)
-                    for res in exec_results:
-                        # Only speak tool spoken_override if assistant was silent or testing speaking speed
-                        if res.spoken_override and (not clean_reply or res.action == "set_speaking_speed"):
+                    for tc, res in zip(llm_resp.tool_calls, exec_results):
+                        # Information tools (get_schedules, web_search): return findings to LLM so AI answers in its own words!
+                        if tc.name in ("get_schedules", "web_search"):
+                            findings = ""
+                            if res.data and isinstance(res.data, dict):
+                                findings = res.data.get("summary") or res.data.get("snippets") or ""
+                            elif res.message:
+                                findings = res.message
+                            elif res.spoken_override:
+                                findings = res.spoken_override
+
+                            if findings:
+                                print(f"[*] Synthesizing {tc.name} findings with LLM...")
+                                synth_text = self.brain.synthesize_tool_answer(
+                                    user_query=user_text,
+                                    tool_name=tc.name,
+                                    tool_data=findings,
+                                    on_sentence_ready=on_sentence,
+                                )
+                                print(f">>> [AI ANSWER]: \"{synth_text}\"")
+                                clean_reply = synth_text
+                            else:
+                                no_res_msg = "Couldn't find any information on that."
+                                print(f">>> [AI ANSWER]: \"{no_res_msg}\"")
+                                ws_server.broadcast_stream_chunk(no_res_msg, user_text)
+                                speech_queue.put(no_res_msg)
+                                clean_reply = no_res_msg
+                        elif res.spoken_override and res.action == "set_speaking_speed":
+                            # Only set_speaking_speed uses spoken_override for immediate rate demonstration
                             clean_override = TTSSynthesizer.clean_spoken_text(res.spoken_override)
-                            print(f">>> [RESULT]: \"{clean_override}\"")
                             ws_server.broadcast_stream_chunk(clean_override, user_text)
                             speech_queue.put(clean_override)
                             clean_reply = clean_override

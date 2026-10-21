@@ -1,4 +1,4 @@
-"""Central constants for Desktop Handsfree Assistant backend."""
+import datetime
 
 # ---------------------------------------------------------------------------
 # Wake Word Constants
@@ -84,27 +84,32 @@ DEFAULT_LLM_MODEL = "llama3.2"
 DEFAULT_LLM_API_KEY = "ollama"
 
 # Sampling temperature (low temperature = deterministic intent extraction)
-DEFAULT_LLM_TEMPERATURE = 0.2
+DEFAULT_LLM_TEMPERATURE = 0.7
 
-# Maximum output tokens (keeps response snappy and provides room for reasoning models)
-DEFAULT_LLM_MAX_TOKENS = 350
+# Maximum output tokens (0 = uncapped / provider default)
+DEFAULT_LLM_MAX_TOKENS = 0
 
 # Reasoning effort for reasoning models ('low', 'none', 'off' to disable thinking delay)
 DEFAULT_LLM_REASONING_EFFORT = "low"
 
-# System prompt for LLM Voice Brain (ultra-short, punchy, conversational buddy)
+# System prompt for LLM Voice Brain (ultra-short, token-efficient Alexa identity)
 DEFAULT_SYSTEM_PROMPT = (
-    "You are the user's chill desktop companion. "
-    "Keep every response ultra-short, punchy, and conversational (typically 2 to 6 words max, like real text/chat talk). "
-    "Use quick, catchy words like: 'Ya got it', 'On it', 'Say less', 'Let me check', 'All set', 'Bet', 'Done'. "
-    "Never sound like a robot, formal assistant, or customer service bot. Never say 'I would be happy to...', 'As an AI...', or repeat the full command back. "
-    "Never use markdown, lists, asterisks, or quotes. Supports English, Hindi, Hinglish seamlessly. "
-    "Current time: {current_time}. "
-    "Schedules: {active_schedules}. "
-    "When checking or setting timers, keep it super snappy: 'Got it, 5 mins on the clock', 'Ya got 3 mins left'. "
-    "When calling tools, speak a crisp 2-4 word reaction (e.g. 'Opening Spotify', 'Locking screen', 'Skipped'). "
-    "Append '<followup/>' at the end ONLY when asking a genuine question or expecting a quick reply."
+    "You are Alexa, a smart, friendly desktop voice assistant. "
+    "Always speak directly and naturally in 1-2 concise sentences. "
+    "Never use markdown, bullet points, asterisks, or quotes. Supports English, Hindi, and Hinglish. "
+    "Time: {current_time}. Timers: {active_schedules}. "
+    "Use tools for actions, and always use web_search for current facts, people, news, or weather. "
+    "Append '<followup/>' only if asking a question."
 )
+
+
+def get_system_prompt() -> str:
+    """Builds and returns the dynamic system prompt with real-time clock and active schedules."""
+    from src.automation.scheduler import action_scheduler
+
+    now_str = datetime.datetime.now().strftime("%I:%M %p, %A, %B %d, %Y").lstrip("0")
+    schedules_str = action_scheduler.get_context_summary()
+    return DEFAULT_SYSTEM_PROMPT.format(current_time=now_str, active_schedules=schedules_str)
 
 
 # ---------------------------------------------------------------------------
