@@ -1,23 +1,33 @@
 # Desktop Handsfree Assistant
 
-> A privacy-first, free, and open-source "Hey Google" for Desktop.
+> A privacy-first, free, and open-source "Alexa" for Desktop.
 
-## Vision
-An always-listening or push-to-talk voice assistant running on your personal computer that controls workflows, launches applications, and manages desktop automation without sending your private voice recordings or screen activity to third-party ad networks.
+Desktop Handsfree Assistant is a voice-controlled desktop automation system. It listens for a configured wake word, converts speech to text, performs supported actions, and responds with synthesized speech.
 
-## Architecture & Project Structure
-This repository is organized as a modular monorepo:
+## Features
+
+- Local wake-word detection, speech recognition, and text-to-speech
+- Desktop automation, application control, media, and volume controls
+- Web search, timers, reminders, and scheduled tasks
+- React desktop overlay with live status and transcripts
+- Python backend connected to the frontend through WebSockets
+
+## Project Structure
 
 ```text
 desktop-handsfree-assistant/
-├── app/         # Desktop application wrapper (Neutralino / Tauri / Electron)
-├── backend/     # Python voice & automation engine (STT, TTS, agent, automation)
-├── frontend/    # React desktop interface
-├── .editorconfig
-├── .env.example
-├── .gitignore
-└── README.md
+├── app/         # Neutralino desktop wrapper
+├── backend/     # Python voice and automation engine
+├── frontend/    # React and TypeScript desktop overlay
+└── release/     # Packaged release files
 ```
 
-## Getting Started
-Follow the step-by-step setup guides inside each corresponding subfolder as modules are developed.
+## Build
+
+Run the bundler from the project root:
+
+```powershell
+.\bundle.ps1
+```
+
+The packaged app is created in `release/HandsfreeAssistant/`.
