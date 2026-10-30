@@ -9,17 +9,22 @@ DEFINITION: dict[str, Any] = {
     "type": "function",
     "function": {
         "name": "schedule_action",
-        "description": "Schedule a delayed timer, reminder, or future system action. Call this whenever the user says 'set a timer for X', 'remind me in X to Y', 'lock computer in X minutes', or 'mute in X seconds'.",
+        "description": "Schedule a delayed timer, reminder, or future system action. Call this whenever the user says 'set a timer for X', 'remind me in X to Y', 'remind me for Y after X', 'lock computer in X minutes', or 'mute in X seconds'.",
         "parameters": {
             "type": "object",
             "properties": {
                 "delay_seconds": {
                     "type": "number",
-                    "description": "Delay in seconds from now (e.g. 60 for 1 min, 300 for 5 min, 1800 for 30 min, 3600 for 1 hour).",
+                    "description": "Delay in seconds from now (e.g. 60 for 1 min, 120 for 2 min, 300 for 5 min, 1800 for 30 min, 3600 for 1 hour).",
                 },
                 "description": {
                     "type": "string",
-                    "description": "Description of the reminder or task, e.g. 'tea break', '5 minute timer', 'lock computer'.",
+                    "description": (
+                        "The reminder or task content. Must be phrased as a natural 2nd-person imperative action or concise subject "
+                        "(e.g., 'charge your phone', 'take your medicine', 'call mom', 'check the oven', 'tea break', '2 minute timer'). "
+                        "IMPORTANT: Always convert 1st-person phrases and gerunds into direct 2nd-person actions. "
+                        "For example: 'charging my phone' -> 'charge your phone', 'to take my vitamins' -> 'take your vitamins', 'remind me to call John' -> 'call John'."
+                    ),
                 },
                 "action_type": {
                     "type": "string",

@@ -19,6 +19,8 @@ DEFINITION: dict[str, Any] = {
 
 def execute() -> ExecutionResult:
     """Retrieve all currently active schedules and return structured data to the LLM."""
+    from src.core.events import emit_status
+    emit_status("Checking schedule...", tool_name="get_schedules")
     active_tasks = action_scheduler.get_active_tasks()
     if not active_tasks:
         summary = "No active timers or scheduled reminders."

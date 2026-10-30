@@ -8,19 +8,26 @@ import {
   handleWindowDrag,
   showWindow,
   showNativeNotification,
+  ensureAlwaysOnTop,
 } from "./services/desktop";
 import {
   AssistantWebSocketClient,
   type ConnectionStatus,
 } from "./services/websocket";
-import type { AssistantState, AssistantResponse, WSMessage } from "./types/assistant";
+import type {
+  AssistantState,
+  AssistantResponse,
+  WSMessage,
+} from "./types/assistant";
 import { UI_MESSAGES } from "./constants/messages";
 
 export default function App() {
   const [state, setState] = useState<AssistantState>("idle");
   const [response, setResponse] = useState<AssistantResponse | null>(null);
   const [liveTranscript, setLiveTranscript] = useState<string>("");
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
+  const [statusMessage, setStatusMessage] = useState<string>("");
+  const [connectionStatus, setConnectionStatus] =
+    useState<ConnectionStatus>("disconnected");
   const [isFollowup, setIsFollowup] = useState<boolean>(false);
 
   const wsClientRef = useRef<AssistantWebSocketClient | null>(null);
@@ -29,9 +36,17 @@ export default function App() {
   // Initialize Desktop Native Environment
   useEffect(() => {
     initDesktopRuntime(() => {
-      setWindowSize(440, 85);
-      // Auto-hide on blur is disabled — window stays visible when unfocused
+      setWindowSize(440, 100);
+      ensureAlwaysOnTop();
     });
+
+    const handleBlur = () => {
+      ensureAlwaysOnTop();
+    };
+    window.addEventListener("blur", handleBlur);
+    return () => {
+      window.removeEventListener("blur", handleBlur);
+    };
   }, []);
 
   // Initialize and maintain WebSocket connection to Python backend
@@ -45,20 +60,30 @@ export default function App() {
           break;
 
         case "SERVER_STATE_CHANGE": {
-          const payload = msg.payload as { state?: AssistantState; is_followup?: boolean };
+          const payload = msg.payload as {
+            state?: AssistantState;
+            is_followup?: boolean;
+          };
           if (payload?.state) {
             setState(payload.state);
             const followup = !!payload.is_followup;
             setIsFollowup(followup);
             if (payload.state === "listening") {
               setLiveTranscript("");
-              if (!followup) {
-                setResponse(null);
-              }
+              setStatusMessage("");
             } else if (payload.state === "idle") {
               setLiveTranscript("");
+              setStatusMessage("");
               setIsFollowup(false);
             }
+          }
+          break;
+        }
+
+        case "SERVER_STATUS": {
+          const payload = msg.payload as { message?: string };
+          if (payload?.message) {
+            setStatusMessage(payload.message);
           }
           break;
         }
@@ -75,9 +100,18 @@ export default function App() {
         case "SERVER_STREAM_CHUNK": {
           const payload = msg.payload as { chunk?: string; query?: string };
           if (payload?.chunk) {
-            const queryText = payload.query || currentQueryRef.current || UI_MESSAGES.DEFAULT_QUERY_TITLE;
+            const queryText =
+              payload.query ||
+              currentQueryRef.current ||
+              UI_MESSAGES.DEFAULT_QUERY_TITLE;
             setResponse((prev) => {
-              if (!prev) {
+              // Immediately start fresh if starting a new speech turn
+              const isNewResponse =
+                !prev ||
+                !prev.isStreaming ||
+                (payload.query && prev.query !== payload.query);
+
+              if (isNewResponse) {
                 return {
                   id: Date.now().toString(),
                   query: queryText,
@@ -86,10 +120,13 @@ export default function App() {
                   timestamp: UI_MESSAGES.JUST_NOW,
                 };
               }
+
               return {
                 ...prev,
                 query: prev.query || queryText,
-                content: prev.content ? `${prev.content} ${payload.chunk}` : (payload.chunk || ""),
+                content: prev.content
+                  ? `${prev.content} ${payload.chunk}`
+                  : payload.chunk || "",
                 isStreaming: true,
               };
             });
@@ -98,10 +135,18 @@ export default function App() {
         }
 
         case "SERVER_RESPONSE_COMPLETE": {
-          const payload = msg.payload as { query?: string; content?: string; needs_followup?: boolean };
+          const payload = msg.payload as {
+            query?: string;
+            content?: string;
+            needs_followup?: boolean;
+          };
           setResponse((prev) => ({
             id: prev?.id || Date.now().toString(),
-            query: payload?.query || prev?.query || currentQueryRef.current || UI_MESSAGES.DEFAULT_QUERY_TITLE,
+            query:
+              payload?.query ||
+              prev?.query ||
+              currentQueryRef.current ||
+              UI_MESSAGES.DEFAULT_QUERY_TITLE,
             content: payload?.content || prev?.content || "",
             isStreaming: false,
             timestamp: UI_MESSAGES.JUST_NOW,
@@ -110,12 +155,18 @@ export default function App() {
             setState("idle");
           }
           setLiveTranscript("");
+          setStatusMessage("");
           break;
         }
 
         case "SERVER_NOTIFICATION": {
-          const payload = msg.payload as { title?: string; message?: string; taskId?: string };
-          const title = payload?.title || UI_MESSAGES.DEFAULT_NOTIFICATION_TITLE;
+          const payload = msg.payload as {
+            title?: string;
+            message?: string;
+            taskId?: string;
+          };
+          const title =
+            payload?.title || UI_MESSAGES.DEFAULT_NOTIFICATION_TITLE;
           const body = payload?.message || "";
           showNativeNotification(title, body);
           showWindow();
@@ -134,6 +185,7 @@ export default function App() {
           console.error("[WS] Server error:", payload?.error);
           setState("idle");
           setIsFollowup(false);
+          setStatusMessage("");
           break;
         }
 
@@ -145,7 +197,7 @@ export default function App() {
     const client = new AssistantWebSocketClient(
       "ws://127.0.0.1:8765",
       handleWSMessage,
-      (status) => setConnectionStatus(status)
+      (status) => setConnectionStatus(status),
     );
 
     wsClientRef.current = client;
@@ -159,9 +211,9 @@ export default function App() {
   // Dynamically resize native window when response card expands
   useEffect(() => {
     if (response) {
-      setWindowSize(440, 380);
+      setWindowSize(440, 400);
     } else {
-      setWindowSize(440, 85);
+      setWindowSize(440, 130);
     }
   }, [response]);
 
@@ -172,6 +224,18 @@ export default function App() {
     setState("idle");
     setIsFollowup(false);
     setLiveTranscript("");
+    setStatusMessage("");
+  }, []);
+
+  const clearSession = useCallback(() => {
+    if (wsClientRef.current?.isConnected()) {
+      wsClientRef.current.send("CLIENT_CLEAR_SESSION");
+    }
+    setResponse(null);
+    setLiveTranscript("");
+    setStatusMessage("");
+    setIsFollowup(false);
+    currentQueryRef.current = "";
   }, []);
 
   const handleToggleMic = () => {
@@ -186,8 +250,8 @@ export default function App() {
       wsClientRef.current.send("CLIENT_TRIGGER_LISTEN");
       setState("listening");
       setIsFollowup(false);
-      setResponse(null);
       setLiveTranscript("");
+      setStatusMessage("");
     } else {
       // If offline, attempt reconnecting
       wsClientRef.current?.connect();
@@ -197,8 +261,7 @@ export default function App() {
   return (
     <div
       id="window-drag-region"
-      onMouseDown={handleWindowDrag}
-      className="w-full h-full flex flex-col justify-end items-center px-2 pb-2 bg-transparent select-none cursor-grab active:cursor-grabbing"
+      className="w-full h-full flex flex-col justify-end items-center px-0.3 pb-0.3 bg-transparent select-none"
     >
       <div className="w-full flex flex-col items-center justify-end gap-1.5">
         {/* Streaming Response Card */}
@@ -206,7 +269,13 @@ export default function App() {
           {response && (
             <ResponseCard
               response={response}
-              onClose={() => setResponse(null)}
+              onClose={() => {
+                if (state !== "idle") {
+                  cancelWorkflow();
+                }
+                clearSession();
+              }}
+              onDragStart={handleWindowDrag}
             />
           )}
         </AnimatePresence>
@@ -218,6 +287,8 @@ export default function App() {
           liveTranscript={liveTranscript}
           connectionStatus={connectionStatus}
           isFollowup={isFollowup}
+          statusMessage={statusMessage}
+          onDragStart={handleWindowDrag}
         />
       </div>
     </div>

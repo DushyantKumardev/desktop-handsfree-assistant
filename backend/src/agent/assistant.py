@@ -35,6 +35,9 @@ class HandsfreeAssistant:
     def __init__(self) -> None:
         self.running = False
         self._wake_triggered = False
+        self._is_followup = False
+        self._cancel_requested = threading.Event()
+        self._active_speech_queue: Optional[queue.Queue[Optional[str]]] = None
 
         t0 = time.time()
         self.mic = AudioCapture(config.audio)
@@ -48,11 +51,51 @@ class HandsfreeAssistant:
 
         # Connect WebSocket broadcast server for frontend overlay
         ws_server.on_trigger_listen = lambda: setattr(self, "_wake_triggered", True)
-        def handle_cancel():
+
+        def handle_cancel() -> None:
+            logger.info("[CANCEL] Stop requested by client.")
+            self._cancel_requested.set()
             self._wake_triggered = False
+            self._is_followup = False
+            self.recorder.cancel()
+            self.tts.stop()
+            if self._active_speech_queue is not None:
+                while not self._active_speech_queue.empty():
+                    try:
+                        self._active_speech_queue.get_nowait()
+                        self._active_speech_queue.task_done()
+                    except Exception:
+                        break
+                try:
+                    self._active_speech_queue.put_nowait(None)
+                except Exception:
+                    pass
             self.brain.reset_conversation()
-            self._reset_and_listen()
+            ws_server.broadcast_state("idle")
+
+        def handle_reset_session() -> None:
+            logger.info("[SESSION] Reset requested: Clearing conversation memory for a completely new session.")
+            self.brain.reset_conversation()
+            self._is_followup = False
+            self._wake_triggered = False
+            self._cancel_requested.set()
+            self.recorder.cancel()
+            self.tts.stop()
+            if self._active_speech_queue is not None:
+                while not self._active_speech_queue.empty():
+                    try:
+                        self._active_speech_queue.get_nowait()
+                        self._active_speech_queue.task_done()
+                    except Exception:
+                        break
+                try:
+                    self._active_speech_queue.put_nowait(None)
+                except Exception:
+                    pass
+            ws_server.broadcast_state("idle")
+
         ws_server.on_cancel_requested = handle_cancel
+        ws_server.on_reset_session = handle_reset_session
         ws_server.start()
 
         self._print_banner()
@@ -95,15 +138,21 @@ class HandsfreeAssistant:
         print("[IDLE] Waiting for wake word...\n")
 
         try:
-            is_followup = False
+            self._is_followup = False
             while self.running:
                 if not self._wake_triggered:
                     time.sleep(0.02)
                     continue
 
-                # 1. Immediately pause wake word detection to prevent false triggers during command/speech
+                # 1. Reset cancellation state & TTS stop flag for this new turn
+                self._cancel_requested.clear()
+                self.tts.reset()
+
+                # 2. Immediately pause wake word detection to prevent false triggers during command/speech
                 self.detector.stop_listening()
                 self._wake_triggered = False
+                is_followup = self._is_followup
+                self._is_followup = False
 
                 if is_followup:
                     print("\n>>> [FOLLOW-UP LISTENING CYCLE ACTIVATED]")
@@ -114,27 +163,41 @@ class HandsfreeAssistant:
                     ws_server.broadcast_show_widget()
                     ws_server.broadcast_state("listening", is_followup=False)
 
-                # 2. Play listening sound cue and flush microphone buffer
+                # 3. Play listening sound cue and flush microphone buffer
                 self.sounds.play_start()
                 self.mic.flush_queue()
 
-                # 3. Record voice command using Voice Activity Detection
+                # 4. Record voice command using Voice Activity Detection
                 print("[LISTENING] Listening for your command...", flush=True)
                 command_audio = self.recorder.record_phrase(self.mic)
+
+                if self._cancel_requested.is_set():
+                    print("[CANCEL] Aborted during voice recording.\n")
+                    self._reset_and_listen()
+                    continue
+
                 self.sounds.play_stop(wait=False)
 
-                # 4. Transcribe speech using Whisper
+                # 5. Transcribe speech using Whisper
                 print("[+] Processing STT...", flush=True)
                 ws_server.broadcast_state("thinking")
                 t_stt = time.time()
                 user_text = self.stt.transcribe(command_audio)
                 stt_latency = time.time() - t_stt
 
+                if self._cancel_requested.is_set():
+                    print("[CANCEL] Aborted during transcription.\n")
+                    self._reset_and_listen()
+                    continue
+
                 if not user_text:
                     if is_followup:
                         print("[FOLLOW-UP] No speech heard for follow-up question. Ending turn.\n")
                         is_followup = False
                         ws_server.broadcast_state("idle")
+                        self._reset_and_listen()
+                        continue
+                    if self._cancel_requested.is_set():
                         self._reset_and_listen()
                         continue
                     self.tts.speak(AssistantResponses.NO_SPEECH_HEARD)
@@ -149,21 +212,28 @@ class HandsfreeAssistant:
                 # Reset follow-up status for current processing turn
                 is_followup = False
 
-                # 5. LLM Brain with Live Token Streaming & Tool Collection
+                # 6. LLM Brain with Live Token Streaming & Tool Collection
                 t_llm = time.time()
                 first_speech = True
 
                 # Background speech worker queue so all sentences stream seamlessly in order
                 speech_queue: queue.Queue[Optional[str]] = queue.Queue()
+                self._active_speech_queue = speech_queue
 
                 def speech_worker() -> None:
                     while True:
-                        item = speech_queue.get()
+                        if self._cancel_requested.is_set():
+                            break
+                        try:
+                            item = speech_queue.get(timeout=0.1)
+                        except queue.Empty:
+                            continue
                         if item is None:
                             speech_queue.task_done()
                             break
                         try:
-                            self.tts.speak(item, stream=True)
+                            if not self._cancel_requested.is_set():
+                                self.tts.speak(item, stream=True)
                         except Exception as e:
                             logger.error("TTS playback error: %s", e)
                         finally:
@@ -174,8 +244,10 @@ class HandsfreeAssistant:
 
                 def on_sentence(sentence: str) -> None:
                     nonlocal first_speech
+                    if self._cancel_requested.is_set():
+                        return
                     cleaned = TTSSynthesizer.clean_spoken_text(sentence)
-                    if not cleaned:
+                    if not cleaned or self._cancel_requested.is_set():
                         return
                     # Broadcast each sentence chunk to frontend in real time
                     ws_server.broadcast_state("speaking")
@@ -188,19 +260,40 @@ class HandsfreeAssistant:
                 llm_resp = self.brain.process_command(
                     user_text,
                     on_sentence_ready=on_sentence,
+                    is_cancelled=self._cancel_requested.is_set,
                 )
                 llm_latency = time.time() - t_llm
+
+                if self._cancel_requested.is_set():
+                    print("[CANCEL] Aborted during LLM streaming.\n")
+                    self.tts.stop()
+                    self._drain_queue(speech_queue)
+                    tts_thread.join(timeout=0.5)
+                    self._active_speech_queue = None
+                    self._reset_and_listen()
+                    continue
+
                 clean_reply = TTSSynthesizer.clean_spoken_text(llm_resp.spoken_reply)
                 if clean_reply:
                     print(f">>> [ASSISTANT]: \"{clean_reply}\" ({llm_latency:.2f}s)")
 
-                # 6. Native Tool Execution
+                # 7. Native Tool Execution
                 if llm_resp.tool_calls:
+                    if self._cancel_requested.is_set():
+                        self.tts.stop()
+                        self._drain_queue(speech_queue)
+                        tts_thread.join(timeout=0.5)
+                        self._active_speech_queue = None
+                        self._reset_and_listen()
+                        continue
+
                     for tc in llm_resp.tool_calls:
                         print(f">>> [ACTION]: {tc.name}({tc.args})")
 
                     exec_results = self.executor.execute_tools(llm_resp.tool_calls)
                     for tc, res in zip(llm_resp.tool_calls, exec_results):
+                        if self._cancel_requested.is_set():
+                            break
                         # Information tools (get_schedules, web_search): return findings to LLM so AI answers in its own words!
                         if tc.name in ("get_schedules", "web_search"):
                             findings = ""
@@ -212,12 +305,15 @@ class HandsfreeAssistant:
                                 findings = res.spoken_override
 
                             if findings:
+                                from src.core.events import emit_status
+                                emit_status("Just a sec...")
                                 print(f"[*] Synthesizing {tc.name} findings with LLM...")
                                 synth_text = self.brain.synthesize_tool_answer(
                                     user_query=user_text,
                                     tool_name=tc.name,
                                     tool_data=findings,
                                     on_sentence_ready=on_sentence,
+                                    is_cancelled=self._cancel_requested.is_set,
                                 )
                                 print(f">>> [AI ANSWER]: \"{synth_text}\"")
                                 clean_reply = synth_text
@@ -238,7 +334,13 @@ class HandsfreeAssistant:
 
                 # Signal speech queue to finish and wait for all playback to complete
                 speech_queue.put(None)
-                tts_thread.join()
+                tts_thread.join(timeout=10.0 if not self._cancel_requested.is_set() else 0.5)
+                self._active_speech_queue = None
+
+                if self._cancel_requested.is_set():
+                    print("[CANCEL] Turn aborted before response completion.\n")
+                    self._reset_and_listen()
+                    continue
 
                 # Signal completion to frontend
                 ws_server.broadcast_response_complete(
@@ -251,7 +353,7 @@ class HandsfreeAssistant:
                     print(">>> [AI REQUESTED FOLLOW-UP (<followup/> detected)]")
                     time.sleep(0.35)
                     self.mic.flush_queue()
-                    is_followup = True
+                    self._is_followup = True
                     self._wake_triggered = True
                 else:
                     self._reset_and_listen()
@@ -261,12 +363,27 @@ class HandsfreeAssistant:
         finally:
             self.stop()
 
+    def _drain_queue(self, q: queue.Queue) -> None:
+        """Safely empties a queue to prevent leftover items from being processed."""
+        while not q.empty():
+            try:
+                q.get_nowait()
+                q.task_done()
+            except Exception:
+                break
+        try:
+            q.put_nowait(None)
+        except Exception:
+            pass
+
     def _reset_and_listen(self) -> None:
         """Flushes buffers and resumes wake-word listening."""
-        time.sleep(0.4)
+        time.sleep(0.3)
         self.mic.flush_queue()
         self.detector.reset()
         self._wake_triggered = False
+        self._is_followup = False
+        self._cancel_requested.clear()
         self.detector.start_listening(self.mic)
         print("[IDLE] Waiting for wake word...\n")
 

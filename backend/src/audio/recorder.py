@@ -17,6 +17,11 @@ class AudioRecorder:
 
     def __init__(self, vad_config: Optional[VADConfig] = None) -> None:
         self.config = vad_config or config.vad
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        """Immediately interrupts any ongoing recording session."""
+        self._cancelled = True
 
     @staticmethod
     def calculate_energy(chunk: np.ndarray) -> float:
@@ -43,6 +48,7 @@ class AudioRecorder:
         """
         # 1. Flush any stale audio chunks (like the wake word 'Alexa') before recording
         audio_capture.flush_queue()
+        self._cancelled = False
 
         recorded_chunks: List[np.ndarray] = []
         has_started_speaking = False
@@ -61,6 +67,10 @@ class AudioRecorder:
         start_time = time.time()
 
         while True:
+            if self._cancelled:
+                logger.info("Audio recording aborted by cancellation.")
+                return np.array([], dtype=np.int16)
+
             elapsed = time.time() - start_time
 
             # 2. Safety maximum duration check

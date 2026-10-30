@@ -41,6 +41,7 @@ class LLMBrain:
         on_sentence_ready: Optional[Callable[[str], None]] = None,
         on_reply_ready: Optional[Callable[[str], None]] = None,
         on_token: Optional[Callable[[str], None]] = None,
+        is_cancelled: Optional[Callable[[], bool]] = None,
     ) -> LLMResponse:
         """
         Processes user query with the LLM.
@@ -83,6 +84,8 @@ class LLMBrain:
         first_sentence_emitted = False
 
         def handle_sentence(sentence: str) -> None:
+            if is_cancelled and is_cancelled():
+                return
             nonlocal first_sentence_emitted
             if callable(on_sentence_ready):
                 on_sentence_ready(sentence)
@@ -101,6 +104,9 @@ class LLMBrain:
             stream = self.client.chat.completions.create(**request_kwargs)
 
             for chunk in stream:
+                if is_cancelled and is_cancelled():
+                    logger.info("LLM generation cancelled by user.")
+                    break
                 if not chunk.choices:
                     continue
                 delta = chunk.choices[0].delta
@@ -154,6 +160,7 @@ class LLMBrain:
         tool_data: str,
         on_sentence_ready: Optional[Callable[[str], None]] = None,
         on_token: Optional[Callable[[str], None]] = None,
+        is_cancelled: Optional[Callable[[], bool]] = None,
     ) -> str:
         """
         Synthesizes tool data (get_schedules, web_search, etc.) into a punchy, spoken conversational answer using the LLM.
@@ -202,14 +209,23 @@ class LLMBrain:
         if extra_body:
             request_kwargs["extra_body"] = extra_body
 
+        def handle_sentence(sentence: str) -> None:
+            if is_cancelled and is_cancelled():
+                return
+            if callable(on_sentence_ready):
+                on_sentence_ready(sentence)
+
         sentence_detector = StreamingSentenceDetector(
-            on_sentence=on_sentence_ready,
+            on_sentence=handle_sentence,
             on_token=on_token,
         )
 
         try:
             stream = self.client.chat.completions.create(**request_kwargs)
             for chunk in stream:
+                if is_cancelled and is_cancelled():
+                    logger.info("Tool answer synthesis cancelled by user.")
+                    break
                 if not chunk.choices:
                     continue
                 delta = chunk.choices[0].delta

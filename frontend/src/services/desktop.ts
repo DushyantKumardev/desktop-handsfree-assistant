@@ -56,7 +56,8 @@ export const showWindow = async (): Promise<void> => {
     try {
       await Neutralino.window.show();
       await Neutralino.window.focus();
-      console.log("[Desktop] Window shown and focused");
+      await Neutralino.window.setAlwaysOnTop(true);
+      console.log("[Desktop] Window shown, focused, and set always on top");
     } catch (err) {
       console.warn("[Desktop] Failed to show window:", err);
     }
@@ -109,19 +110,31 @@ export const registerBlurAutoHide = (onBlurCallback?: () => void): void => {
   window.addEventListener("blur", handleBlur);
 };
 
+export const ensureAlwaysOnTop = async (): Promise<void> => {
+  if (isNativeEnvironment()) {
+    try {
+      await Neutralino.window.setAlwaysOnTop(true);
+    } catch (err) {
+      console.warn("[Desktop] Failed to set always on top:", err);
+    }
+  }
+};
+
 export const initDesktopRuntime = (onReady?: () => void): void => {
   if (isNativeEnvironment()) {
     try {
       Neutralino.init();
       console.log("[Desktop] Runtime initialized");
-      Neutralino.events.on("ready", () => {
+      Neutralino.events.on("ready", async () => {
         console.log("[Desktop] Neutralino ready event received");
         setupSystemTray();
+        await ensureAlwaysOnTop();
         if (onReady) onReady();
       });
       // In case ready event already fired
-      setTimeout(() => {
+      setTimeout(async () => {
         setupSystemTray();
+        await ensureAlwaysOnTop();
         if (onReady) onReady();
       }, 100);
     } catch (err) {
@@ -175,6 +188,7 @@ export const handleWindowDrag = async (e: React.MouseEvent): Promise<void> => {
       window.removeEventListener("mouseup", cleanup);
       window.removeEventListener("pointerup", cleanup);
       window.removeEventListener("blur", cleanup);
+      ensureAlwaysOnTop();
     };
 
     const onMouseMove = async (moveEvent: MouseEvent) => {
@@ -221,6 +235,7 @@ export const setWindowSize = async (
       if (deltaH !== 0) {
         await Neutralino.window.move(currentX, currentY - deltaH);
       }
+      await ensureAlwaysOnTop();
     } catch (err) {
       console.warn("[Desktop] Failed to resize window:", err);
     }

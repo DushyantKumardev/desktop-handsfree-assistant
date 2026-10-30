@@ -18,6 +18,8 @@
   "modes": {
     "window": {
       "title": "Desktop Handsfree Assistant",
+      "width": 440,
+      "height": 100,
       "minWidth": 380,
       "minHeight": 70,
       "center": true,

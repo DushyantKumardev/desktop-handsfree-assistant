@@ -3,6 +3,7 @@
 import io
 import logging
 import re
+import time
 import urllib.request
 import wave
 from pathlib import Path
@@ -38,6 +39,7 @@ class TTSSynthesizer:
 
     def __init__(self, tts_config: Optional[TTSConfig] = None) -> None:
         self.config = tts_config or config.tts
+        self._stop_requested = False
         # Restore speed from persistent storage cache, falling back to config default
         self.speed = SettingsStorage.get_speaking_speed(default=float(self.config.speed))
         self.models_dir = Path(__file__).resolve().parent.parent.parent / "models" / "piper"
@@ -47,6 +49,18 @@ class TTSSynthesizer:
 
         # Pre-load default voice
         self._get_voice(self.config.voice)
+
+    def stop(self) -> None:
+        """Immediately halts any active speech synthesis and audio playback."""
+        self._stop_requested = True
+        try:
+            sd.stop()
+        except Exception:
+            pass
+
+    def reset(self) -> None:
+        """Resets the stop flag so new speech synthesis can proceed."""
+        self._stop_requested = False
 
     @classmethod
     def get_instance(cls) -> Optional["TTSSynthesizer"]:
@@ -182,7 +196,7 @@ class TTSSynthesizer:
         Playback starts on the very first audio chunk (~50-100ms).
         """
         clean_text = self.clean_spoken_text(text)
-        if not clean_text:
+        if not clean_text or self._stop_requested:
             return
 
         if not voice_name:
@@ -198,8 +212,15 @@ class TTSSynthesizer:
         # Open low-latency output stream
         with sd.OutputStream(samplerate=sample_rate, channels=1, dtype="int16") as stream:
             for chunk in voice.synthesize(clean_text, syn_config=syn_config):
+                if self._stop_requested:
+                    stream.abort()
+                    return
                 if chunk.audio_int16_array is not None and len(chunk.audio_int16_array) > 0:
                     stream.write(chunk.audio_int16_array)
+
+            if self._stop_requested:
+                stream.abort()
+                return
 
             # Trailing silence padding so Windows audio driver doesn't clip the final phoneme
             trailing_padding = np.zeros(int(sample_rate * 0.3), dtype=np.int16)
@@ -210,14 +231,21 @@ class TTSSynthesizer:
         Synthesize text and play through sounddevice.
         If stream=True (default), streams chunks directly to the soundcard for minimum latency.
         """
+        if self._stop_requested:
+            return
+
         if stream:
             self.stream_speak(text, voice_name=voice_name)
             return
 
         audio_array, sample_rate = self.synthesize(text, voice_name=voice_name)
-        if len(audio_array) == 0:
+        if len(audio_array) == 0 or self._stop_requested:
             return
 
         sd.play(audio_array, samplerate=sample_rate)
-        sd.wait()
+        while sd.get_stream() and sd.get_stream().active:
+            if self._stop_requested:
+                sd.stop()
+                break
+            time.sleep(0.04)
 

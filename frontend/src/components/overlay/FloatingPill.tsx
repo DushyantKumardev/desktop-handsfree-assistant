@@ -1,9 +1,9 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, Square, Radio } from "lucide-react";
-import { BackgroundWaveform } from "./BackgroundWaveform";
+import { Mic, Plus } from "lucide-react";
+import { GeminiWaveform } from "./GeminiWaveform";
+import { DragHandle } from "./DragHandle";
 import type { AssistantState } from "../../types/assistant";
-import { UI_MESSAGES } from "../../constants/messages";
 
 interface FloatingPillProps {
   state: AssistantState;
@@ -11,300 +11,223 @@ interface FloatingPillProps {
   liveTranscript?: string;
   connectionStatus?: "connected" | "connecting" | "disconnected";
   isFollowup?: boolean;
+  statusMessage?: string;
+  onDragStart?: (e: React.MouseEvent) => void;
 }
-
-// Wave color + orb config per state in refined shadcn palette
-const STATE_CONFIG = {
-  listening: {
-    waveColor: "rgba(250, 250, 250, 0.9)", // zinc-50 / white wave
-    orbColor: "rgba(255, 255, 255, 0.18)",
-    intensity: 0.8,
-    label: null,
-    textColor: "text-zinc-100",
-  },
-  thinking: {
-    waveColor: "rgba(168, 85, 247, 0.9)", // violet-500
-    orbColor: "rgba(147, 51, 234, 0.25)",
-    intensity: 0.6,
-    label: UI_MESSAGES.THINKING,
-    textColor: "text-zinc-300",
-  },
-  speaking: {
-    waveColor: "rgba(16, 185, 129, 0.9)", // emerald-500
-    orbColor: "rgba(5, 150, 105, 0.25)",
-    intensity: 0.9,
-    label: null,
-    textColor: "text-emerald-400",
-  },
-};
 
 export const FloatingPill: React.FC<FloatingPillProps> = ({
   state,
   onToggleMic,
   liveTranscript,
-  connectionStatus = "disconnected",
-  isFollowup = false,
+  statusMessage,
+  onDragStart,
 }) => {
   const isListening = state === "listening";
   const isThinking = state === "thinking";
   const isSpeaking = state === "speaking";
-  const isActive = isListening || isThinking || isSpeaking;
+  const isBusy = isThinking || isSpeaking;
 
-  const cfg = isListening
-    ? STATE_CONFIG.listening
-    : isThinking
-      ? STATE_CONFIG.thinking
-      : isSpeaking
-        ? STATE_CONFIG.speaking
-        : null;
-
-  // Mic button styling per shadcn state
-  const micBg = isListening
-    ? "bg-zinc-100 text-zinc-950 border-white shadow-[0_0_20px_rgba(255,255,255,0.35)]"
-    : isThinking
-      ? "bg-violet-600 text-white border-violet-400/40 shadow-[0_0_16px_rgba(139,92,246,0.35)]"
-      : isSpeaking
-        ? "bg-emerald-600 text-white border-emerald-400/40 shadow-[0_0_16px_rgba(16,185,129,0.35)]"
-        : "bg-zinc-900/90 hover:bg-zinc-800 text-zinc-200 border-zinc-700/70 hover:border-zinc-500/80 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]";
+  const currentStatusText =
+    statusMessage || (isSpeaking ? "Speaking..." : "Just a sec...");
 
   return (
     <motion.div
       layout
-      className={`relative w-full flex items-center justify-between px-3.5 py-2.5 rounded-full border shadow-2xl shadow-black/80 select-none overflow-hidden transition-all duration-300 ${
-        isActive
-          ? "bg-zinc-950 border-zinc-700/80"
-          : "bg-zinc-950 border-zinc-800 hover:border-zinc-700/60"
-      }`}
+      transition={{ layout: { type: "spring", stiffness: 420, damping: 34 } }}
+      className="relative w-full flex flex-col items-center justify-between px-3.5 pt-1 pb-2.5 rounded-full bg-surface-pill border border-border-subtle shadow-[0_12px_36px_rgba(0,0,0,0.75)] select-none overflow-hidden transition-colors duration-300"
     >
-      {/* ── Background waveform layer (behind everything) ──────────────────── */}
-      <AnimatePresence>
-        {cfg && (
-          <motion.div
-            key={`wave-${state}`}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.5, ease: "easeInOut" }}
-            style={{
-              position: "absolute",
-              inset: 0,
-              zIndex: 0,
-              borderRadius: "9999px",
-              overflow: "hidden",
-            }}
-          >
-            <BackgroundWaveform
-              color={cfg.waveColor}
-              intensity={cfg.intensity}
-              layers={3}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <DragHandle onDragStart={onDragStart} className="pt-1 pb-1" />
 
-      {/* ── Bottom-center radial orb glow ─────────────────────────────────── */}
       <AnimatePresence>
-        {cfg && (
+        {(isThinking || isSpeaking || isListening) && (
           <motion.div
-            key={`orb-${state}`}
-            aria-hidden="true"
-            initial={{ opacity: 0, scale: 0.6, y: 20 }}
+            key="ambient-glow"
+            initial={{ opacity: 0, scaleY: 0.4 }}
             animate={{
-              opacity: [0.7, 1, 0.75],
-              scale: [1, 1.2, 1],
-              y: [8, 2, 8],
-              x: [0, 5, -4, 0],
+              opacity: isThinking ? [0.6, 0.95, 0.6] : 0.5,
+              scaleY: isThinking ? [1, 1.18, 1] : 1,
             }}
-            exit={{ opacity: 0, scale: 0.5, y: 20 }}
+            exit={{ opacity: 0, scaleY: 0.4, transition: { duration: 0.25 } }}
             transition={{
-              opacity: { duration: 0.4, ease: "easeOut" },
-              scale: { duration: 3.5, repeat: Infinity, ease: "easeInOut" },
-              y: { duration: 3.5, repeat: Infinity, ease: "easeInOut" },
-              x: { duration: 5, repeat: Infinity, ease: "easeInOut" },
+              duration: 2.2,
+              repeat: isThinking ? Infinity : 0,
+              ease: "easeInOut",
             }}
+            className="absolute inset-x-0 bottom-0 h-10 pointer-events-none rounded-b-full"
             style={{
-              position: "absolute",
-              bottom: "-28px",
-              left: "50%",
-              transform: "translateX(-50%)",
-              width: "220px",
-              height: "80px",
-              background: `radial-gradient(ellipse at 50% 100%, ${cfg.orbColor} 0%, transparent 72%)`,
-              filter: "blur(1px)",
-              pointerEvents: "none",
+              background: "var(--glow-gradient)",
               zIndex: 0,
             }}
           />
         )}
       </AnimatePresence>
 
-      {/* ── Top edge glow line ────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {isActive && (
-          <motion.div
-            key="glow-line"
-            initial={{ opacity: 0, scaleX: 0 }}
-            animate={{ opacity: 1, scaleX: 1 }}
-            exit={{ opacity: 0, scaleX: 0 }}
-            transition={{ duration: 0.4, ease: "easeOut" }}
-            className={`absolute inset-x-8 top-0 h-px rounded-full pointer-events-none ${
-              isListening
-                ? "bg-gradient-to-r from-transparent via-white/50 to-transparent"
-                : isThinking
-                  ? "bg-gradient-to-r from-transparent via-violet-400/50 to-transparent"
-                  : "bg-gradient-to-r from-transparent via-emerald-400/50 to-transparent"
-            }`}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* ── Content sits above wave (z-10) ────────────────────────────────── */}
-
-      {/* Left: connection status */}
-      <div className="relative z-10 flex items-center">
-        <div className="relative w-7 h-7 flex items-center justify-center">
-          <Radio
-            color={
-              connectionStatus === "connected"
-                ? "green"
-                : connectionStatus === "connecting"
-                  ? "yellow"
-                  : "gray"
-            }
-            className={`w-3.5 h-3.5 transition-colors duration-300 ${
-              connectionStatus === "connected"
-                ? "text-zinc-400"
-                : connectionStatus === "connecting"
-                  ? "text-amber-400"
-                  : "text-zinc-600"
-            }`}
-          />
-        </div>
-      </div>
-
-      {/* Center: state label */}
-      <div className="relative z-10 flex-1 mx-2 flex items-center justify-center overflow-hidden min-w-0">
-        <AnimatePresence mode="wait">
-          {isListening ? (
-            <motion.div
-              key="listening"
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.16 }}
-              className="flex items-center gap-2 max-w-full min-w-0"
-            >
-              {liveTranscript ? (
-                <span className="text-[12px] text-zinc-100 truncate font-normal tracking-tight">
-                  "{liveTranscript}"
-                </span>
-              ) : (
+      <div className="relative z-10 w-full flex items-center justify-between h-11 px-1">
+        {/* Left Section: Smooth status crossfade */}
+        <div className="flex items-center gap-2.5 min-w-0">
+          <AnimatePresence mode="popLayout" initial={false}>
+            {isBusy ? (
+              <motion.div
+                key="busy-status-badge"
+                layout
+                initial={{ opacity: 0, x: -10, filter: "blur(4px)" }}
+                animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+                exit={{ opacity: 0, x: -8, filter: "blur(4px)" }}
+                transition={{ duration: 0.22, ease: "easeOut" }}
+                className="flex items-center gap-2 pl-1"
+              >
                 <motion.span
-                  animate={{ opacity: [0.6, 1, 0.6] }}
+                  animate={{ scale: [1, 1.25, 1], opacity: [0.6, 1, 0.6] }}
                   transition={{
-                    duration: 1.8,
+                    duration: 1.4,
                     repeat: Infinity,
                     ease: "easeInOut",
                   }}
-                  className="text-[12px] text-zinc-200 font-medium tracking-tight"
-                >
-                  {isFollowup
-                    ? UI_MESSAGES.LISTENING_FOLLOWUP
-                    : UI_MESSAGES.LISTENING}
-                </motion.span>
-              )}
-            </motion.div>
-          ) : isThinking ? (
-            <motion.div
-              key="thinking"
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.16 }}
-              className="flex items-center gap-1.5"
-            >
-              <span className="text-[12px] text-zinc-300 font-medium tracking-tight">
-                {UI_MESSAGES.THINKING}
-              </span>
-              <span className="inline-flex gap-1 items-center">
-                <span className="w-1 h-1 rounded-full bg-violet-400 dot-bounce-1" />
-                <span className="w-1 h-1 rounded-full bg-violet-400 dot-bounce-2" />
-                <span className="w-1 h-1 rounded-full bg-violet-400 dot-bounce-3" />
-              </span>
-            </motion.div>
-          ) : isSpeaking ? (
-            <motion.div
-              key="speaking"
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.16 }}
-            >
-              <motion.span
-                animate={{ opacity: [0.7, 1, 0.7] }}
-                transition={{
-                  duration: 1.5,
-                  repeat: Infinity,
-                  ease: "easeInOut",
-                }}
-                className="text-[12px] text-emerald-400 font-medium tracking-tight"
+                  className="w-2 h-2 rounded-full bg-accent-hover shrink-0"
+                />
+                <span className="text-[15px] text-content-primary font-normal tracking-tight font-sans truncate max-w-[210px]">
+                  {currentStatusText}
+                </span>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="idle-plus-group"
+                layout
+                initial={{ opacity: 0, x: -8, filter: "blur(4px)" }}
+                animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+                exit={{ opacity: 0, x: -8, filter: "blur(4px)" }}
+                transition={{ duration: 0.22, ease: "easeOut" }}
+                className="flex items-center gap-2.5"
               >
-                {UI_MESSAGES.SPEAKING}
-              </motion.span>
-            </motion.div>
-          ) : (
-            <motion.span
-              key="idle"
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.16 }}
-              className="text-[12px] text-zinc-400 tracking-tight font-normal"
-            >
-              {connectionStatus === "connected"
-                ? UI_MESSAGES.IDLE_PROMPT
-                : UI_MESSAGES.WAITING_FOR_BACKEND}
-            </motion.span>
-          )}
-        </AnimatePresence>
-      </div>
+                <button
+                  type="button"
+                  className="w-7 h-7 flex items-center justify-center text-content-secondary hover:text-white rounded-full transition-colors cursor-pointer"
+                  title="Action"
+                  onClick={onToggleMic}
+                >
+                  <Plus className="w-5 h-5 stroke-[2]" />
+                </button>
 
-      {/* Right: mic button */}
-      <motion.button
-        className={`relative z-10 w-9 h-9 rounded-full flex items-center justify-center cursor-pointer transition-all duration-200 border ${micBg} ${
-          isListening ? "mic-glow" : ""
-        }`}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.94 }}
-        onMouseDown={(e) => e.stopPropagation()}
-        onClick={onToggleMic}
-        title={isActive ? UI_MESSAGES.MIC_STOP : UI_MESSAGES.MIC_START}
-        type="button"
-      >
-        <AnimatePresence mode="wait">
-          {isActive ? (
-            <motion.span
-              key="stop"
-              initial={{ scale: 0, rotate: -90 }}
-              animate={{ scale: 1, rotate: 0 }}
-              exit={{ scale: 0, rotate: 90 }}
-              transition={{ duration: 0.16 }}
+                <AnimatePresence>
+                  {state === "idle" && (
+                    <motion.span
+                      layout
+                      initial={{ opacity: 0, x: -6, width: 0 }}
+                      animate={{ opacity: 1, x: 0, width: "auto" }}
+                      exit={{ opacity: 0, x: -6, width: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="text-[15px] text-content-secondary font-normal tracking-tight font-sans whitespace-nowrap overflow-hidden"
+                    >
+                      Ask Assistant
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Center: Live Audio Waveform or Transcript */}
+        <AnimatePresence>
+          {isListening && (
+            <motion.div
+              layout
+              initial={{ opacity: 0, scale: 0.9, filter: "blur(4px)" }}
+              animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+              exit={{ opacity: 0, scale: 0.92, filter: "blur(3px)" }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="flex-1 flex items-center justify-center px-2 min-w-0"
             >
-              <Square className="w-3.5 h-3.5 fill-current" />
-            </motion.span>
-          ) : (
-            <motion.span
-              key="mic"
-              initial={{ scale: 0, rotate: 90 }}
-              animate={{ scale: 1, rotate: 0 }}
-              exit={{ scale: 0, rotate: -90 }}
-              transition={{ duration: 0.16 }}
-            >
-              <Mic style={{ width: 18, height: 18 }} />
-            </motion.span>
+              <AnimatePresence mode="popLayout" initial={false}>
+                {liveTranscript ? (
+                  <motion.span
+                    key="live-transcript"
+                    layout
+                    initial={{ opacity: 0, y: 4, filter: "blur(2px)" }}
+                    animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                    exit={{ opacity: 0, y: -4, filter: "blur(2px)" }}
+                    transition={{ duration: 0.18 }}
+                    className="text-[14px] text-content-primary font-normal truncate max-w-[220px]"
+                  >
+                    "{liveTranscript}"
+                  </motion.span>
+                ) : (
+                  <motion.div
+                    key="waveform"
+                    layout
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ duration: 0.18 }}
+                  >
+                    <GeminiWaveform barCount={15} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
           )}
         </AnimatePresence>
-      </motion.button>
+
+        {/* Right Section: Action Button & Smooth Wave Indicators */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          <motion.button
+            layout
+            whileTap={{ scale: 0.92 }}
+            type="button"
+            onClick={onToggleMic}
+            className={`w-10 h-10 rounded-full flex items-center justify-center shadow-md cursor-pointer transition-colors duration-300 ${
+              isListening
+                ? "bg-accent hover:bg-accent-hover text-accent-fg shadow-[var(--glow-shadow)]"
+                : isBusy
+                  ? "bg-accent hover:bg-accent-hover text-accent-fg"
+                  : "bg-accent-dark hover:bg-accent-dark-hover text-accent-fg"
+            }`}
+            title={
+              isBusy
+                ? "Cancel"
+                : isListening
+                  ? "Stop listening"
+                  : "Start listening"
+            }
+          >
+            <AnimatePresence mode="popLayout" initial={false}>
+              {isBusy ? (
+                <motion.div
+                  key="square"
+                  initial={{ scale: 0.6, opacity: 0, rotate: -25 }}
+                  animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                  exit={{ scale: 0.6, opacity: 0, rotate: 25 }}
+                  transition={{ duration: 0.16, ease: "easeOut" }}
+                  className="flex items-center justify-center"
+                >
+                  <svg
+                    className="w-4 h-4 text-white"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="4.5" y="4.5" width="15" height="15" rx="4" />
+                  </svg>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="mic"
+                  initial={{ scale: 0.6, opacity: 0, rotate: 25 }}
+                  animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                  exit={{ scale: 0.6, opacity: 0, rotate: -25 }}
+                  transition={{ duration: 0.16, ease: "easeOut" }}
+                  className="flex items-center justify-center"
+                >
+                  <Mic className="w-5 h-5 stroke-[2.2]" />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.button>
+        </div>
+      </div>
     </motion.div>
   );
 };

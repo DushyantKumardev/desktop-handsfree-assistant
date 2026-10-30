@@ -33,6 +33,7 @@ class AssistantWSServer:
         self.running = False
         self.on_trigger_listen: Optional[Callable[[], None]] = None
         self.on_cancel_requested: Optional[Callable[[], None]] = None
+        self.on_reset_session: Optional[Callable[[], None]] = None
 
     def start(self) -> None:
         """Starts the WebSocket server in a background daemon thread."""
@@ -74,6 +75,9 @@ class AssistantWSServer:
                         elif msg_type == "CLIENT_CANCEL":
                             if self.on_cancel_requested:
                                 self.on_cancel_requested()
+                        elif msg_type in ("CLIENT_CLEAR_SESSION", "CLIENT_RESET_SESSION"):
+                            if self.on_reset_session:
+                                self.on_reset_session()
                         elif msg_type == "PING":
                             await websocket.send(json.dumps({"type": "PONG", "timestamp": int(time.time() * 1000)}))
                     except Exception as err:
@@ -145,6 +149,13 @@ class AssistantWSServer:
             "title": title,
             "message": message,
             "taskId": task_id,
+        })
+
+    def broadcast_status(self, message: str, tool_name: Optional[str] = None) -> None:
+        """Broadcasts real-time tool or assistant status message (e.g. 'Searching Google...')."""
+        self.broadcast("SERVER_STATUS", {
+            "message": message,
+            "tool_name": tool_name,
         })
 
 

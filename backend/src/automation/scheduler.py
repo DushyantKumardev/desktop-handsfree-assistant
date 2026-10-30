@@ -118,7 +118,6 @@ class ActionScheduler:
         """Returns all currently active, non-expired tasks."""
         with self._lock:
             now = time.time()
-            # Clean up any stale expired tasks
             active = [t for t in self._tasks.values() if t.trigger_time > now]
             return sorted(active, key=lambda x: x.trigger_time)
 

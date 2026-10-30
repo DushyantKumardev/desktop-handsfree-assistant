@@ -25,4 +25,6 @@ DEFINITION: dict[str, Any] = {
 
 def execute(query: str) -> ExecutionResult:
     """Perform headless web search and return spoken summary in spoken_override."""
+    from src.core.events import emit_status
+    emit_status("Searching Google...", tool_name="web_search")
     return WebHandler.headless_search(query)
